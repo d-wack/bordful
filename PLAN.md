@@ -387,7 +387,30 @@ belonging to a company they are a member of).
 
 ---
 
-## 7. Roadmap (Phased)
+## 7. AI Development Agent Directory
+
+To facilitate high-velocity development and preserve context window efficiency on our local development machines, the expansion is partitioned among specialized, context-isolated AI agents:
+
+### 1. `@backend` (Backend Engineering Agent)
+* **Focus**: Server-side APIs, business logic, normalizers, repository wrappers, and third-party integrations (Stripe, transactional email).
+* **Scope**: `/app/api/**/*`, `/lib/db/types.ts`, `/lib/db/airtable.server.ts`, `/lib/db/prisma.server.ts`, payment webhook handlers, and server-side validation schemas (`zod`).
+* **Execution Role**: Owns structural decoupling in Phase 0 and implements write paths / Auth.js security layers.
+
+### 2. `@frontend` (Frontend Engineering Agent)
+* **Focus**: React 19 UI components, theme styling, layout structures, and search parameters/URL state management.
+* **Scope**: `/app/**/*` rendering views, `/components/**/*`, global Tailwind and design tokens, and user search-state filters synchronization (`nuqs`).
+* **Execution Role**: Translates mockups and specifications into responsive, accessible (WCAG AA), and highly-optimized interfaces.
+
+### 3. `@database` (Database Engineering Agent)
+* **Focus**: Relational schema design, database performance, migrations, and caching boundaries.
+* **Scope**: `/prisma/schema.prisma`, SQL indices, data seeding, and idempotent database-importing / data-migration scripts.
+* **Execution Role**: Deploys in Phase 1 to migrate static Airtable data models to structured PostgreSQL/Prisma targets.
+
+Agents are invoked directly by their handles inside Claude Code or via OpenCode to automatically inject these core roles and specific directories into their active contexts.
+
+---
+
+## 8. Roadmap (Phased)
 
 Each phase is independently shippable and gated behind a config flag.
 
@@ -448,7 +471,7 @@ Each phase is independently shippable and gated behind a config flag.
 
 ---
 
-## 8. Cross-Cutting Concerns
+## 9. Cross-Cutting Concerns
 
 - **Security:** server-side authz on every mutation; validate all input with
   **Zod**; rate-limit (generalize the in-memory limiter in `/api/subscribe` to a
@@ -462,14 +485,14 @@ Each phase is independently shippable and gated behind a config flag.
 - **Migrations:** Prisma Migrate; the Airtable importer is idempotent and re-runnable.
 - **Docs:** mirror the existing `docs/` quality — every new module ships a guide.
 
-## 9. Suggested Dependencies (new)
+## 10. Suggested Dependencies (new)
 
 `prisma` / `@prisma/client`, `next-auth@5` + `@auth/prisma-adapter`, `stripe`,
 `zod`, `@upstash/ratelimit` + `@upstash/redis`, an upload lib (`uploadthing` or
 `@aws-sdk/client-s3`), `vitest` + `@testing-library/react` + `@playwright/test`,
 and optionally `typesense`/`meilisearch` for Phase 6.
 
-## 10. Risks & Open Questions
+## 11. Risks & Open Questions
 
 - **Dual data backend complexity** — mitigated by the repository interface, but
   adds maintenance surface. Decide whether Airtable mode is a long-term commitment
