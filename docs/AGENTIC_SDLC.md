@@ -42,6 +42,7 @@ The development pipeline operates as an autonomous loop orchestrated by **Hermes
   * Breaks down product goals into highly structured issues.
   * Spawns, monitors, and terminates specialist developer and tester agents.
   * Coordinates branch switching, merges, and alerts the Human Product Owner when UAT is ready.
+  * **Compiles the "Lessons Learned Retrospective"**: At the conclusion of each development phase (post-UAT and merge), Hermes compiles a comprehensive retroactive log detailing architectural trade-offs, agent optimizations, solved tooling hurdles, and process adjustments. This log is appended directly to the project's historical knowledge base inside Obsidian (under `Lessons Learned/`) and the repository documentation.
 
 ### 2. Claude Code (The Developer Agent)
 * **Role**: Headless feature engineer executing codebase modifications.
