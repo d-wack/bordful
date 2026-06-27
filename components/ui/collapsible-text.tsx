@@ -25,6 +25,7 @@ export function CollapsibleText({ text, maxLength }: CollapsibleTextProps) {
       <button
         className="mt-1 text-sm text-zinc-900 underline underline-offset-4 transition-colors hover:text-zinc-700"
         onClick={() => setIsExpanded(!isExpanded)}
+        type="button"
       >
         {isExpanded ? 'Show less' : 'Show more'}
       </button>

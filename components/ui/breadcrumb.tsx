@@ -84,10 +84,8 @@ const BreadcrumbPage = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <span
     aria-current="page"
-    aria-disabled="true"
     className={cn('font-normal text-foreground', className)}
     ref={ref}
-    role="link"
     {...props}
   />
 ));
@@ -153,9 +151,7 @@ function ServerBreadcrumb({
                   {isLastItem ? (
                     <span
                       aria-current="page"
-                      aria-disabled="true"
                       className="font-normal text-gray-900"
-                      role="link"
                     >
                       {item.name}
                     </span>

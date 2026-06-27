@@ -78,6 +78,7 @@ export function JobSearchInput({
           aria-label="Clear search"
           className="-translate-y-1/2 absolute top-1/2 right-3 text-gray-400 hover:text-gray-600"
           onClick={onClear}
+          type="button"
         >
           <X className="h-4 w-4" />
         </button>

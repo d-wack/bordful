@@ -25,6 +25,35 @@ const CHECKBOX_MARKER_LENGTH = 4;
 // Regex constants for performance
 const FINAL_WORD_REGEX = /(\w)$/;
 
+/** Formats a human-readable location prefix for metadata descriptions. */
+function formatMetaLocation(
+  workplaceType: string,
+  remoteRegion: string | null,
+  city: string | null,
+  country: string | null
+): string {
+  if (workplaceType === 'Remote') {
+    if (!remoteRegion || remoteRegion === 'Worldwide') {
+      return 'Remote position (Worldwide)';
+    }
+    return `Remote position in ${remoteRegion}`;
+  }
+
+  const physicalLocation = [city, country].filter(Boolean).join(', ');
+
+  if (workplaceType === 'Hybrid') {
+    return physicalLocation
+      ? `Hybrid position in ${physicalLocation}`
+      : 'Hybrid position';
+  }
+
+  if (workplaceType === 'On-site') {
+    return physicalLocation ? `in ${physicalLocation}` : '';
+  }
+
+  return '';
+}
+
 // Generate static params for all active jobs
 export async function generateStaticParams() {
   const jobs = await getJobs();
@@ -59,41 +88,12 @@ export async function generateMetadata({
   }
 
   // Format location for metadata based on workplace type
-  const metaLocation = (() => {
-    // For Remote jobs, show the region if available
-    if (job.workplace_type === 'Remote') {
-      if (!job.remote_region) {
-        return 'Remote position (Worldwide)';
-      }
-
-      // For Worldwide specifically, don't use "in"
-      if (job.remote_region === 'Worldwide') {
-        return 'Remote position (Worldwide)';
-      }
-
-      // For other regions, use "in"
-      return `Remote position in ${job.remote_region}`;
-    }
-
-    // For Hybrid jobs, show the location with Hybrid prefix
-    if (job.workplace_type === 'Hybrid') {
-      const location = [job.workplace_city, job.workplace_country]
-        .filter(Boolean)
-        .join(', ');
-      return location ? `Hybrid position in ${location}` : 'Hybrid position';
-    }
-
-    // For On-site jobs, show the location directly
-    if (job.workplace_type === 'On-site') {
-      const location = [job.workplace_city, job.workplace_country]
-        .filter(Boolean)
-        .join(', ');
-      return location ? `in ${location}` : '';
-    }
-
-    // Default case (Not specified)
-    return '';
-  })();
+  const metaLocation = formatMetaLocation(
+    job.workplace_type,
+    job.remote_region,
+    job.workplace_city,
+    job.workplace_country
+  );
 
   // Format deadline if available
   const deadlineText = (() => {
@@ -180,6 +180,31 @@ export async function generateMetadata({
 // Revalidate page every 5 minutes (300 seconds) instead of forcing dynamic rendering
 export const revalidate = 300;
 
+/** Formats a display location string for the job detail page. */
+function resolveDisplayLocation(
+  workplaceType: string,
+  remoteRegion: string | null,
+  city: string | null,
+  country: string | null
+): string | null {
+  if (workplaceType === 'Remote') {
+    return remoteRegion ? `Remote (${remoteRegion})` : null;
+  }
+
+  if (workplaceType === 'Hybrid') {
+    const parts = [
+      city,
+      country,
+      remoteRegion ? `Hybrid (${remoteRegion})` : null,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : null;
+  }
+
+  // On-site or other types
+  const parts = [city, country].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
 export default async function JobPostPage({
   params,
 }: {
@@ -201,26 +226,12 @@ export default async function JobPostPage({
   const showSalary =
     job.salary && (job.salary.min !== null || job.salary.max !== null);
 
-  // Format location based on workplace type
-  let location: string | null = null;
-
-  if (job.workplace_type === 'Remote') {
-    location = job.remote_region ? `Remote (${job.remote_region})` : null;
-  } else if (job.workplace_type === 'Hybrid') {
-    const hybridParts = [
-      job.workplace_city,
-      job.workplace_country,
-      job.remote_region ? `Hybrid (${job.remote_region})` : null,
-    ].filter(Boolean);
-
-    location = hybridParts.length > 0 ? hybridParts.join(', ') : null;
-  } else {
-    // On-site or other types
-    const onsiteParts = [job.workplace_city, job.workplace_country].filter(
-      Boolean
-    );
-    location = onsiteParts.length > 0 ? onsiteParts.join(', ') : null;
-  }
+  const location = resolveDisplayLocation(
+    job.workplace_type,
+    job.remote_region,
+    job.workplace_city,
+    job.workplace_country
+  );
 
   return (
     <main className="container py-6">

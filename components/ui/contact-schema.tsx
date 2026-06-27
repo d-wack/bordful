@@ -19,7 +19,7 @@ export const ContactSchema: FC<ContactSchemaProps> = ({
   phone = config.contact?.contactInfo?.phone || '+1-555-123-4567',
   address = config.contact?.contactInfo?.address ||
     '123 Main St, Anytown, AN 12345',
-  url = `${config.url}/contact` || 'https://example.com/contact',
+  url = `${config.url}/contact`,
   description = config.contact?.schema?.description ||
     config.contact?.description ||
     'Get in touch with our team for any questions or support needs.',

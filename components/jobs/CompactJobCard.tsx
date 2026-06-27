@@ -6,6 +6,10 @@ import { formatSalary, type Job } from '@/lib/db/airtable';
 import { formatDate } from '@/lib/utils/formatDate';
 import { generateJobSlug } from '@/lib/utils/slugify';
 
+const TITLE_MAX_LENGTH = 40;
+const NEW_JOB_THRESHOLD_HOURS = 48;
+const MS_PER_HOUR = 3_600_000; // 1000 * 60 * 60
+
 export function CompactJobCard({ job }: { job: Job }) {
   const { relativeTime } = formatDate(job.posted_date);
   const showSalary =
@@ -16,17 +20,20 @@ export function CompactJobCard({ job }: { job: Job }) {
     const now = new Date();
     const postedDate = new Date(job.posted_date);
     const diffInHours = Math.floor(
-      (now.getTime() - postedDate.getTime()) / (1000 * 60 * 60)
+      (now.getTime() - postedDate.getTime()) / MS_PER_HOUR
     );
-    return diffInHours <= 48;
+    return diffInHours <= NEW_JOB_THRESHOLD_HOURS;
   };
 
-  // Simplify location to just the type
-  const workplaceType = job.workplace_type || '';
+  // Only show workplace type when it carries meaningful information
+  const workplaceType =
+    job.workplace_type !== 'Not specified' ? job.workplace_type : null;
 
   // Limit title length to prevent layout issues
   const limitedTitle =
-    job.title.length > 40 ? `${job.title.substring(0, 40)}...` : job.title;
+    job.title.length > TITLE_MAX_LENGTH
+      ? `${job.title.substring(0, TITLE_MAX_LENGTH)}...`
+      : job.title;
 
   return (
     <Link

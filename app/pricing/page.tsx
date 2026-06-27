@@ -82,8 +82,8 @@ export default function PricingPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          {config.pricing.plans.map((plan, index) => (
-            <div className="group relative" key={index}>
+          {config.pricing.plans.map((plan) => (
+            <div className="group relative" key={plan.name}>
               <div
                 className={`block h-full rounded-lg border px-5 py-6 transition-all ${
                   plan.highlighted
@@ -162,8 +162,8 @@ export default function PricingPage() {
                   <div className="border-t pt-4" />
 
                   <ul className="space-y-2.5">
-                    {plan.features.map((feature, featureIndex) => (
-                      <li className="flex items-start" key={featureIndex}>
+                    {plan.features.map((feature) => (
+                      <li className="flex items-start" key={feature}>
                         <Check className="mt-0.5 mr-2 h-4 w-4 flex-shrink-0 text-green-600" />
                         <span className="text-gray-700 text-sm">{feature}</span>
                       </li>

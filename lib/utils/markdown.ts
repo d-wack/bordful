@@ -237,7 +237,7 @@ export function normalizeMarkdown(raw: string): string {
               hasBoldHeader: false,
               markerStyle,
             });
-          } else if (indentation > listStack.at(-1).indent) {
+          } else if (indentation > (listStack.at(-1)?.indent ?? -1)) {
             // This is a nested list
             listStack.push({
               indent: indentation,
@@ -250,7 +250,7 @@ export function normalizeMarkdown(raw: string): string {
             // Pop items from stack until we find the appropriate level
             while (
               listStack.length > 0 &&
-              indentation <= listStack.at(-1).indent
+              indentation <= (listStack.at(-1)?.indent ?? -1)
             ) {
               listStack.pop();
             }
@@ -305,7 +305,7 @@ export function normalizeMarkdown(raw: string): string {
               hasBoldHeader,
               markerStyle,
             });
-          } else if (indentation > listStack.at(-1).indent) {
+          } else if (indentation > (listStack.at(-1)?.indent ?? -1)) {
             // This is a nested list
             listStack.push({
               indent: indentation,
@@ -318,7 +318,7 @@ export function normalizeMarkdown(raw: string): string {
             // Pop items from stack until we find the appropriate level
             while (
               listStack.length > 0 &&
-              indentation <= listStack.at(-1).indent
+              indentation <= (listStack.at(-1)?.indent ?? -1)
             ) {
               listStack.pop();
             }
@@ -376,7 +376,7 @@ export function normalizeMarkdown(raw: string): string {
               hasBoldHeader,
               markerStyle,
             });
-          } else if (indentation > listStack.at(-1).indent) {
+          } else if (indentation > (listStack.at(-1)?.indent ?? -1)) {
             // This is a nested list
             listStack.push({
               indent: indentation,
@@ -389,7 +389,7 @@ export function normalizeMarkdown(raw: string): string {
             // Pop items from stack until we find the appropriate level
             while (
               listStack.length > 0 &&
-              indentation <= listStack.at(-1).indent
+              indentation <= (listStack.at(-1)?.indent ?? -1)
             ) {
               listStack.pop();
             }
@@ -428,7 +428,7 @@ export function normalizeMarkdown(raw: string): string {
           hasBoldHeader,
           markerStyle,
         });
-      } else if (indentation > listStack.at(-1).indent) {
+      } else if (indentation > (listStack.at(-1)?.indent ?? -1)) {
         // This is a nested list
         listStack.push({
           indent: indentation,
@@ -439,7 +439,10 @@ export function normalizeMarkdown(raw: string): string {
         });
       } else {
         // Pop items from stack until we find the appropriate level
-        while (listStack.length > 0 && indentation <= listStack.at(-1).indent) {
+        while (
+          listStack.length > 0 &&
+          indentation <= (listStack.at(-1)?.indent ?? -1)
+        ) {
           listStack.pop();
         }
         listStack.push({
@@ -474,7 +477,7 @@ export function normalizeMarkdown(raw: string): string {
       // This is not a list item
       if (listStack.length > 0) {
         // Check if this is content belonging to the previous list item
-        const lastItem = listStack.at(-1);
+        const lastItemIndent = listStack.at(-1)?.indent ?? -1;
 
         // Check if this is a section introduction (with bold text and ending in colon)
         const isSectionIntro = trimmedLine.match(
@@ -507,7 +510,7 @@ export function normalizeMarkdown(raw: string): string {
           continue;
         }
 
-        if (indentation >= lastItem.indent) {
+        if (indentation >= lastItemIndent) {
           // This is content at the same or greater indentation level as the list item
           const listIndent = '  '.repeat(listStack.length - 1);
           const contentIndent = '  '; // Standard markdown indentation for content
@@ -545,7 +548,7 @@ export function normalizeMarkdown(raw: string): string {
             /^[A-Z][a-z]/.test(trimmedLine) || // Line starts with a capital letter
             (!trimmedLine.match(/^[-*+]|^\d+\.|^[a-z]\./) && // Not a list marker
               trimmedLine !== '' && // Not an empty line
-              indentation === lastItem.indent) // At the exact same indentation as the list item
+              indentation === lastItemIndent) // At the exact same indentation as the list item
           ) {
             // This looks like a new paragraph or non-list content
 

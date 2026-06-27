@@ -11,6 +11,7 @@ import type { MinimalJob } from '@/lib/utils/job-validation';
 import {
   createLinearGradient,
   hexToRGBA,
+  type OGConfig,
   type ProcessedOGConfig,
 } from '@/lib/utils/og-config';
 
@@ -24,7 +25,7 @@ export interface JobProcessedOGConfig extends ProcessedOGConfig {
  * Create job-specific OG configuration
  */
 export function createJobOGConfig(job: MinimalJob): JobProcessedOGConfig {
-  const ogJobConfig = config.og?.jobs || {};
+  const ogJobConfig = (config.og?.jobs ?? {}) as OGConfig;
 
   return {
     fontFamily: ogJobConfig.font?.family || config.font.family || 'geist',
@@ -43,7 +44,8 @@ export function createJobOGConfig(job: MinimalJob): JobProcessedOGConfig {
     gradientEnabled: ogJobConfig.gradient?.enabled !== false,
     gradientColor:
       ogJobConfig.gradient?.color ||
-      ogJobConfig.backgroundColor || config.ui.heroBackgroundColor ||
+      ogJobConfig.backgroundColor ||
+      config.ui.heroBackgroundColor ||
       '#005450',
     gradientAngle:
       ogJobConfig.gradient?.angle !== undefined

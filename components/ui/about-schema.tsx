@@ -14,7 +14,7 @@ type AboutSchemaProps = {
 export const AboutSchema: FC<AboutSchemaProps> = ({
   companyName = config.title,
   description = 'Learn about our mission to connect talented professionals with exciting career opportunities.',
-  url = `${config.url}/about` || 'https://example.com/about',
+  url = `${config.url}/about`,
   logo = config.nav?.logo?.enabled
     ? `${config.url}${config.nav.logo.src}`
     : undefined,

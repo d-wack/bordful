@@ -1,7 +1,7 @@
 import { Feed } from 'feed';
 import config from '@/config';
 import { DEFAULT_DESCRIPTION_LENGTH } from '@/lib/constants/defaults';
-import { formatSalary } from '@/lib/db/airtable';
+import { formatSalary, type Salary } from '@/lib/db/airtable';
 import { getJobs } from '@/lib/db/airtable.server';
 import { generateJobSlug } from '@/lib/utils/slugify';
 
@@ -21,9 +21,9 @@ export type JobItem = {
   company: string;
   type: string;
   workplace_type: string;
-  workplace_city?: string;
-  workplace_country?: string;
-  salary?: any;
+  workplace_city?: string | null;
+  workplace_country?: string | null;
+  salary?: Salary | null;
   posted_date?: string;
   description: string;
   apply_url: string;

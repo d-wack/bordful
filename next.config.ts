@@ -2,12 +2,9 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
-    // !! WARN !!
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
+  // biome-ignore lint/suspicious/useAwait: Next.js types require headers() to be async
   async headers() {
     return [
       {
