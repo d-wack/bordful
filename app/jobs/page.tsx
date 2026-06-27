@@ -24,7 +24,7 @@ import {
   createLocationSlug,
   formatLocationTitle,
 } from '@/lib/constants/locations';
-import type { CareerLevel } from '@/lib/db/airtable';
+import type { CareerLevel, Job } from '@/lib/db/airtable';
 import { getJobs } from '@/lib/db/airtable.server';
 import { resolveColor } from '@/lib/utils/colors';
 import { generateMetadata } from '@/lib/utils/metadata';
@@ -102,58 +102,55 @@ function CategoryCard({ href, title, count }: CategoryCardProps) {
   );
 }
 
+const EMPTY_JOB_COUNTS: JobCounts = {
+  types: {},
+  careerLevels: {} as Record<CareerLevel, number>,
+  locations: { countries: {}, cities: {}, remote: 0 },
+  languages: {} as Record<LanguageCode, number>,
+};
+
+/** Accumulate per-dimension counts for a single job into the running total. */
+function accumulateJobCounts(acc: JobCounts, job: Job): JobCounts {
+  if (job.type) {
+    acc.types[job.type] = (acc.types[job.type] ?? 0) + 1;
+  }
+
+  for (const level of job.career_level) {
+    if (level !== 'NotSpecified') {
+      acc.careerLevels[level] = (acc.careerLevels[level] ?? 0) + 1;
+    }
+  }
+
+  if (job.workplace_country) {
+    const country = job.workplace_country as Country;
+    acc.locations.countries[country] =
+      (acc.locations.countries[country] ?? 0) + 1;
+  }
+  if (job.workplace_city) {
+    acc.locations.cities[job.workplace_city] =
+      (acc.locations.cities[job.workplace_city] ?? 0) + 1;
+  }
+  if (job.workplace_type === 'Remote') {
+    acc.locations.remote += 1;
+  }
+
+  for (const lang of job.languages) {
+    acc.languages[lang] = (acc.languages[lang] ?? 0) + 1;
+  }
+
+  return acc;
+}
+
 export default async function JobsDirectoryPage() {
   const jobs = await getJobs();
 
   // Aggregate job counts by different dimensions
-  const jobCounts = jobs.reduce<JobCounts>(
-    (acc, job) => {
-      // Count by type (skip undefined)
-      if (job.type) {
-        acc.types[job.type] = (acc.types[job.type] || 0) + 1;
-      }
-
-      // Count by career level (skip NotSpecified)
-      for (const level of job.career_level) {
-        if (level !== 'NotSpecified') {
-          acc.careerLevels[level] = (acc.careerLevels[level] || 0) + 1;
-        }
-      }
-
-      // Count by location
-      if (job.workplace_country) {
-        const country = job.workplace_country as Country;
-        acc.locations.countries[country] =
-          (acc.locations.countries[country] || 0) + 1;
-      }
-      if (job.workplace_city) {
-        acc.locations.cities[job.workplace_city] =
-          (acc.locations.cities[job.workplace_city] || 0) + 1;
-      }
-      if (job.workplace_type === 'Remote') {
-        acc.locations.remote += 1;
-      }
-
-      // Count by language
-      if (job.languages) {
-        for (const lang of job.languages) {
-          acc.languages[lang] = (acc.languages[lang] || 0) + 1;
-        }
-      }
-
-      return acc;
-    },
-    {
-      types: {},
-      careerLevels: {} as Record<CareerLevel, number>,
-      locations: {
-        countries: {},
-        cities: {},
-        remote: 0,
-      },
-      languages: {} as Record<LanguageCode, number>,
-    }
-  );
+  const jobCounts = jobs.reduce<JobCounts>(accumulateJobCounts, {
+    ...EMPTY_JOB_COUNTS,
+    careerLevels: {} as Record<CareerLevel, number>,
+    languages: {} as Record<LanguageCode, number>,
+    locations: { countries: {}, cities: {}, remote: 0 },
+  });
 
   // Sort and filter job types to ensure consistent order
   const sortedJobTypes = Object.entries(jobCounts.types)
@@ -217,7 +214,7 @@ export default async function JobsDirectoryPage() {
 
   return (
     <>
-      {/* Add schema markup */}
+      {/* JSON-LD structured data — dangerouslySetInnerHTML is safe here (trusted internal schema) */}
       <Script
         dangerouslySetInnerHTML={{ __html: generateItemListSchema() }}
         id="item-list-schema"

@@ -5,6 +5,27 @@
     "rules": {
       "suspicious": {
         "noUnknownAtRules": "off"
+      },
+      "security": {
+        // dangerouslySetInnerHTML is used for JSON-LD structured-data injection
+        // (components/ui/*-schema.tsx, faq-content.tsx, breadcrumb.tsx, app pages).
+        // All call-sites use internally generated, trusted content — never raw user
+        // input — in line with the official Next.js JSON-LD recommendation:
+        // https://nextjs.org/docs/app/guides/json-ld
+        "noDangerouslySetInnerHtml": "off"
+      },
+      "style": {
+        // React component files conventionally use PascalCase (e.g. JobCard.tsx).
+        // Enforcing kebab-case would require renaming every component file and
+        // updating all imports — a separate, dedicated clean-up task.
+        "useFilenamingConvention": "off"
+      },
+      "performance": {
+        // shadcn/ui auto-generated components (components/ui/*) follow the Radix UI
+        // authoring pattern of `import * as XPrimitive from '@radix-ui/react-x'`
+        // and `import * as React from 'react'`.  Refactoring all shadcn/ui files to
+        // named imports is a separate task that does not belong in Phase 0.
+        "noNamespaceImport": "off"
       }
     }
   }

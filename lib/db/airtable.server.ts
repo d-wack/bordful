@@ -13,8 +13,17 @@ import {
   type LanguageCode,
 } from '@/lib/constants/languages';
 import type { RemoteRegion, WorkplaceType } from '@/lib/constants/workplace';
-import { normalizeMarkdown } from '@/lib/utils/markdown';
 import type { CareerLevel, Job, SalaryUnit } from '@/lib/db/airtable';
+import type { JobRepository } from '@/lib/db/types';
+import { normalizeMarkdown } from '@/lib/utils/markdown';
+
+// ---------------------------------------------------------------------------
+// Top-level regex constants (hoisted for reuse and performance)
+// ---------------------------------------------------------------------------
+const LANGUAGE_CODE_RE = /.*?\(([a-z]{2})\)$/i;
+const CURRENCY_CODE_RE = /^([A-Z]{2,5})\s*\(.*?\)$/i;
+const VISA_YES_RE = /^yes$/i;
+const VISA_NO_RE = /^no$/i;
 
 type AirtableBase = ReturnType<Airtable['base']>;
 
@@ -22,7 +31,7 @@ const getAirtableBase = cache((): AirtableBase | null => {
   const apiKey = process.env.AIRTABLE_ACCESS_TOKEN;
   const baseId = process.env.AIRTABLE_BASE_ID;
 
-  if (!apiKey || !baseId) {
+  if (!(apiKey && baseId)) {
     return null;
   }
 
@@ -88,45 +97,45 @@ function normalizeRemoteRegion(value: unknown): RemoteRegion {
   return null;
 }
 
+// Normalize a single Airtable language value to a LanguageCode or null.
+function normalizeLanguageItem(item: unknown): LanguageCode | null {
+  if (typeof item !== 'string') {
+    return null;
+  }
+
+  // Extract code from "Language Name (code)" format
+  const languageCodeMatch = LANGUAGE_CODE_RE.exec(item);
+  if (languageCodeMatch?.[1]) {
+    const extractedCode = languageCodeMatch[1].toLowerCase();
+    if (LANGUAGE_CODES.includes(extractedCode as LanguageCode)) {
+      return extractedCode as LanguageCode;
+    }
+  }
+
+  // String itself is a valid 2-letter code
+  if (
+    item.length === 2 &&
+    LANGUAGE_CODES.includes(item.toLowerCase() as LanguageCode)
+  ) {
+    return item.toLowerCase() as LanguageCode;
+  }
+
+  // Try to look up by language name
+  const language = getLanguageByName(item);
+  if (language) {
+    return language.code as LanguageCode;
+  }
+
+  return null;
+}
+
 // Function to normalize language data from Airtable
 function normalizeLanguages(value: unknown): LanguageCode[] {
-  if (!value) {
+  if (!(value && Array.isArray(value))) {
     return [];
   }
-
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
   return value
-    .map((item) => {
-      if (typeof item === 'string') {
-        // Extract code from "Language Name (code)" format
-        const languageCodeMatch = /.*?\(([a-z]{2})\)$/i.exec(item);
-        if (languageCodeMatch?.[1]) {
-          const extractedCode = languageCodeMatch[1].toLowerCase();
-          if (LANGUAGE_CODES.includes(extractedCode as LanguageCode)) {
-            return extractedCode as LanguageCode;
-          }
-        }
-
-        // String itself is a valid 2-letter code
-        if (
-          item.length === 2 &&
-          LANGUAGE_CODES.includes(item.toLowerCase() as LanguageCode)
-        ) {
-          return item.toLowerCase() as LanguageCode;
-        }
-
-        // Try to look up by language name
-        const language = getLanguageByName(item);
-        if (language) {
-          return language.code as LanguageCode;
-        }
-      }
-
-      return null;
-    })
+    .map(normalizeLanguageItem)
     .filter((code): code is LanguageCode => code !== null);
 }
 
@@ -138,7 +147,7 @@ function normalizeCurrency(value: unknown): CurrencyCode {
 
   if (typeof value === 'string') {
     // Extract code from "USD (United States Dollar)" format
-    const currencyCodeMatch = /^([A-Z]{2,5})\s*\(.*?\)$/i.exec(value);
+    const currencyCodeMatch = CURRENCY_CODE_RE.exec(value);
     if (currencyCodeMatch?.[1]) {
       const extractedCode = currencyCodeMatch[1].toUpperCase();
       if (CURRENCY_CODES.includes(extractedCode as CurrencyCode)) {
@@ -207,15 +216,87 @@ function normalizeVisaSponsorship(
 
   if (typeof value === 'string') {
     const normalizedValue = value.trim();
-    if (/^yes$/i.test(normalizedValue)) {
+    if (VISA_YES_RE.test(normalizedValue)) {
       return 'Yes';
     }
-    if (/^no$/i.test(normalizedValue)) {
+    if (VISA_NO_RE.test(normalizedValue)) {
       return 'No';
     }
   }
 
   return 'Not specified';
+}
+
+// ---------------------------------------------------------------------------
+// Record-mapping helpers — extracted to keep per-function complexity low
+// ---------------------------------------------------------------------------
+
+/** Coerce an unknown Airtable field value to `string | null`. */
+function toStr(value: unknown): string | null {
+  return (value as string) || null;
+}
+
+/** Build the nullable salary object from raw Airtable field values. */
+function normalizeSalary(
+  salaryMin: unknown,
+  salaryMax: unknown,
+  salaryCurrency: unknown,
+  salaryUnit: unknown
+): Job['salary'] {
+  if (!(salaryMin || salaryMax)) {
+    return null;
+  }
+  return {
+    min: salaryMin ? Number(salaryMin) : null,
+    max: salaryMax ? Number(salaryMax) : null,
+    currency: normalizeCurrency(salaryCurrency),
+    unit: salaryUnit as SalaryUnit,
+  };
+}
+
+/** Map a raw Airtable record to the domain `Job` type. */
+function mapRecordToJob(record: Airtable.Record<Airtable.FieldSet>): Job {
+  const fields = record.fields;
+
+  return {
+    id: record.id,
+    title: fields.title as string,
+    company: fields.company as string,
+    type: fields.type as Job['type'],
+    salary: normalizeSalary(
+      fields.salary_min,
+      fields.salary_max,
+      fields.salary_currency,
+      fields.salary_unit
+    ),
+    description: normalizeMarkdown(fields.description as string),
+    benefits: normalizeBenefits(fields.benefits),
+    application_requirements: normalizeApplicationRequirements(
+      fields.application_requirements
+    ),
+    apply_url: fields.apply_url as string,
+    posted_date: fields.posted_date as string,
+    valid_through: toStr(fields.valid_through),
+    job_identifier: toStr(fields.job_identifier),
+    job_source_name: toStr(fields.job_source_name),
+    status: fields.status as Job['status'],
+    career_level: normalizeCareerLevel(fields.career_level),
+    visa_sponsorship: normalizeVisaSponsorship(fields.visa_sponsorship),
+    featured: !!fields.featured,
+    workplace_type: normalizeWorkplaceType(fields.workplace_type),
+    remote_region: normalizeRemoteRegion(fields.remote_region),
+    timezone_requirements: toStr(fields.timezone_requirements),
+    workplace_city: toStr(fields.workplace_city),
+    workplace_country: toStr(fields.workplace_country),
+    languages: normalizeLanguages(fields.languages),
+    skills: toStr(fields.skills),
+    qualifications: toStr(fields.qualifications),
+    education_requirements: toStr(fields.education_requirements),
+    experience_requirements: toStr(fields.experience_requirements),
+    industry: toStr(fields.industry),
+    occupational_category: toStr(fields.occupational_category),
+    responsibilities: toStr(fields.responsibilities),
+  };
 }
 
 export const getJobs = cache(async (): Promise<Job[]> => {
@@ -232,54 +313,7 @@ export const getJobs = cache(async (): Promise<Job[]> => {
       })
       .all();
 
-    return records.map((record) => {
-      const fields = record.fields;
-
-      return {
-        id: record.id,
-        title: fields.title as string,
-        company: fields.company as string,
-        type: fields.type as Job['type'],
-        salary:
-          fields.salary_min || fields.salary_max
-            ? {
-                min: fields.salary_min ? Number(fields.salary_min) : null,
-                max: fields.salary_max ? Number(fields.salary_max) : null,
-                currency: normalizeCurrency(fields.salary_currency),
-                unit: fields.salary_unit as SalaryUnit,
-              }
-            : null,
-        description: normalizeMarkdown(fields.description as string),
-        benefits: normalizeBenefits(fields.benefits),
-        application_requirements: normalizeApplicationRequirements(
-          fields.application_requirements
-        ),
-        apply_url: fields.apply_url as string,
-        posted_date: fields.posted_date as string,
-        valid_through: (fields.valid_through as string) || null,
-        job_identifier: (fields.job_identifier as string) || null,
-        job_source_name: (fields.job_source_name as string) || null,
-        status: fields.status as Job['status'],
-        career_level: normalizeCareerLevel(fields.career_level),
-        visa_sponsorship: normalizeVisaSponsorship(fields.visa_sponsorship),
-        featured: !!fields.featured,
-        workplace_type: normalizeWorkplaceType(fields.workplace_type),
-        remote_region: normalizeRemoteRegion(fields.remote_region),
-        timezone_requirements: (fields.timezone_requirements as string) || null,
-        workplace_city: (fields.workplace_city as string) || null,
-        workplace_country: (fields.workplace_country as string) || null,
-        languages: normalizeLanguages(fields.languages),
-        skills: (fields.skills as string) || null,
-        qualifications: (fields.qualifications as string) || null,
-        education_requirements:
-          (fields.education_requirements as string) || null,
-        experience_requirements:
-          (fields.experience_requirements as string) || null,
-        industry: (fields.industry as string) || null,
-        occupational_category: (fields.occupational_category as string) || null,
-        responsibilities: (fields.responsibilities as string) || null,
-      };
-    });
+    return records.map(mapRecordToJob);
   } catch {
     return [];
   }
@@ -299,48 +333,7 @@ export const getJob = cache(async (id: string): Promise<Job | null> => {
       return null;
     }
 
-    return {
-      id: record.id,
-      title: fields.title as string,
-      company: fields.company as string,
-      type: fields.type as Job['type'],
-      salary:
-        fields.salary_min || fields.salary_max
-          ? {
-              min: fields.salary_min ? Number(fields.salary_min) : null,
-              max: fields.salary_max ? Number(fields.salary_max) : null,
-              currency: normalizeCurrency(fields.salary_currency),
-              unit: fields.salary_unit as SalaryUnit,
-            }
-          : null,
-      description: normalizeMarkdown(fields.description as string),
-      benefits: normalizeBenefits(fields.benefits),
-      application_requirements: normalizeApplicationRequirements(
-        fields.application_requirements
-      ),
-      apply_url: fields.apply_url as string,
-      posted_date: fields.posted_date as string,
-      valid_through: (fields.valid_through as string) || null,
-      job_identifier: (fields.job_identifier as string) || null,
-      job_source_name: (fields.job_source_name as string) || null,
-      status: fields.status as Job['status'],
-      career_level: normalizeCareerLevel(fields.career_level),
-      visa_sponsorship: normalizeVisaSponsorship(fields.visa_sponsorship),
-      featured: !!fields.featured,
-      workplace_type: normalizeWorkplaceType(fields.workplace_type),
-      remote_region: normalizeRemoteRegion(fields.remote_region),
-      timezone_requirements: (fields.timezone_requirements as string) || null,
-      workplace_city: (fields.workplace_city as string) || null,
-      workplace_country: (fields.workplace_country as string) || null,
-      languages: normalizeLanguages(fields.languages),
-      skills: (fields.skills as string) || null,
-      qualifications: (fields.qualifications as string) || null,
-      education_requirements: (fields.education_requirements as string) || null,
-      experience_requirements: (fields.experience_requirements as string) || null,
-      industry: (fields.industry as string) || null,
-      occupational_category: (fields.occupational_category as string) || null,
-      responsibilities: (fields.responsibilities as string) || null,
-    };
+    return mapRecordToJob(record);
   } catch {
     return null;
   }
@@ -364,3 +357,24 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
+/**
+ * Airtable implementation of the `JobRepository` interface.
+ *
+ * Wraps the cached module-level fetcher functions so that all existing call
+ * sites continue to work unchanged, while new code can depend on the
+ * `JobRepository` interface and receive this implementation (or a future
+ * `PrismaPostgresJobRepository`) via the factory in `lib/db/index.ts`.
+ */
+export class AirtableJobRepository implements JobRepository {
+  getJobs(): Promise<Job[]> {
+    return getJobs();
+  }
+
+  getJob(id: string): Promise<Job | null> {
+    return getJob(id);
+  }
+
+  testConnection(): Promise<boolean> {
+    return testConnection();
+  }
+}

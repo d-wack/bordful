@@ -170,8 +170,7 @@ export async function createOGImageResponse(
           }}
           width={SHARED_STYLES.DIMENSIONS.WIDTH}
         />
-      )
-}
+      )}
 
       {/* Background Color Overlay */}
       <div

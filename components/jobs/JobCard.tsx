@@ -8,37 +8,43 @@ import { resolveColor } from '@/lib/utils/colors';
 import { formatDate } from '@/lib/utils/formatDate';
 import { generateJobSlug } from '@/lib/utils/slugify';
 
+const MS_PER_HOUR = 3_600_000; // 1000 * 60 * 60
+const NEW_JOB_THRESHOLD_HOURS = 48;
+
+/** Returns a display-friendly location string for a job card. */
+function resolveJobCardLocation(job: Job): string | null {
+  if (job.workplace_type === 'Remote') {
+    return job.remote_region ? `Remote (${job.remote_region})` : null;
+  }
+
+  if (job.workplace_type === 'Hybrid') {
+    const parts = [
+      job.workplace_city,
+      job.workplace_country,
+      job.remote_region ? `Hybrid (${job.remote_region})` : null,
+    ].filter(Boolean);
+    return parts.join(', ') || null;
+  }
+
+  const parts = [job.workplace_city, job.workplace_country].filter(Boolean);
+  return parts.join(', ') || null;
+}
+
 export function JobCard({ job }: { job: Job }) {
   const { fullDate, relativeTime } = formatDate(job.posted_date);
   const showSalary =
     job.salary && (job.salary.min !== null || job.salary.max !== null);
 
-  // Format location based on workplace type
-  const location =
-    job.workplace_type === 'Remote'
-      ? job.remote_region
-        ? `Remote (${job.remote_region})`
-        : null
-      : job.workplace_type === 'Hybrid'
-        ? [
-            job.workplace_city,
-            job.workplace_country,
-            job.remote_region ? `Hybrid (${job.remote_region})` : null,
-          ]
-            .filter(Boolean)
-            .join(', ') || null
-        : [job.workplace_city, job.workplace_country]
-            .filter(Boolean)
-            .join(', ') || null;
+  const location = resolveJobCardLocation(job);
 
   // Check if job was posted within the last 48 hours
   const isNew = () => {
     const now = new Date();
     const postedDate = new Date(job.posted_date);
     const diffInHours = Math.floor(
-      (now.getTime() - postedDate.getTime()) / (1000 * 60 * 60)
+      (now.getTime() - postedDate.getTime()) / MS_PER_HOUR
     );
-    return diffInHours <= 48;
+    return diffInHours <= NEW_JOB_THRESHOLD_HOURS;
   };
 
   return (

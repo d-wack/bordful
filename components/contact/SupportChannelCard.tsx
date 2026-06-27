@@ -45,8 +45,10 @@ export function SupportChannelCard({
   // Check if it's Twitter icon
   const isTwitterIcon = icon === 'Twitter';
 
-  // Get the icon component or use HelpCircle as fallback
-  const IconComponent = isTwitterIcon ? null : iconMap[icon] || HelpCircle;
+  // Get the icon component or use HelpCircle as fallback.
+  // Always assign a valid LucideIcon so TypeScript is satisfied;
+  // IconComponent is only rendered in the non-Twitter branch.
+  const IconComponent: LucideIcon = iconMap[icon] ?? HelpCircle;
 
   const isExternalLink =
     buttonLink.startsWith('http') || buttonLink.startsWith('mailto');

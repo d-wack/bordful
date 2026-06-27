@@ -7,6 +7,7 @@ import {
 } from '@/lib/utils/font-utils';
 import { fetchImageAsDataURI } from '@/lib/utils/image-utils';
 import { validateJobAndParams } from '@/lib/utils/job-validation';
+import type { OGLogoConfig } from '@/lib/utils/og-config';
 import {
   createJobOGConfig,
   createJobOGImageResponse,
@@ -63,8 +64,8 @@ export async function GET(
       : '';
 
     // Prepare logo
-    const ogJobConfig = config.og?.jobs || {};
-    const logoConfig = ogJobConfig.logo || {};
+    const ogJobConfig = config.og?.jobs ?? {};
+    const logoConfig = (ogJobConfig.logo ?? {}) as OGLogoConfig;
     const logoDataUri =
       logoConfig.show !== false && logoConfig.src
         ? await fetchImageAsDataURI(logoConfig.src, config.url)

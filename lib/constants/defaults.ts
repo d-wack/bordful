@@ -51,6 +51,19 @@ export const SECONDS_PER_MONTH = SECONDS_PER_DAY * DAYS_PER_MONTH;
 export const RATE_LIMIT_WINDOW_MS =
   MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 
+// Salary computation constants
+export const HOURS_PER_YEAR = 2080; // Standard annual work hours (52 weeks × 40 hrs)
+
+// Salary range tier thresholds (in USD, annual)
+export const SALARY_TIER_1 = 50_000;
+export const SALARY_TIER_2 = 100_000;
+export const SALARY_TIER_3 = 200_000;
+
+// Schema.org / job-validity defaults
+export const MONTHS_PER_YEAR = 12;
+export const DEFAULT_VALIDITY_DAYS = 30;
+export const DEFAULT_EXPERIENCE_MONTHS = 12;
+
 // Regex patterns for performance optimization
 export const FONT_URL_REGEX =
   /src: url\((.+?)\) format\('(opentype|truetype)'\)/;

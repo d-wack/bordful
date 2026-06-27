@@ -6,6 +6,9 @@ import { generateJobSlug } from '@/lib/utils/slugify';
  * Generate the sitemap for the website
  * This function runs at build time and creates a sitemap for all your pages
  */
+const FEATURED_JOB_PRIORITY = 0.9;
+const STANDARD_JOB_PRIORITY = 0.7;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Get the base URL from environment variable or default to localhost
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -76,7 +79,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         url: `${baseUrl}/jobs/${generateJobSlug(job.title, job.company)}`,
         lastModified: new Date(job.posted_date),
         changeFrequency: 'daily' as const,
-        priority: job.featured ? 0.9 : 0.7,
+        priority: job.featured ? FEATURED_JOB_PRIORITY : STANDARD_JOB_PRIORITY,
       }));
 
     // Create sitemap entries for job category pages

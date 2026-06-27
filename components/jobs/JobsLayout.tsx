@@ -11,6 +11,13 @@ import { PostJobBanner } from '@/components/ui/post-job-banner';
 import { SortOrderSelect } from '@/components/ui/sort-order-select';
 import type { JobType } from '@/lib/constants/job-types';
 import type { LanguageCode } from '@/lib/constants/languages';
+import {
+  DEFAULT_PER_PAGE,
+  HOURS_PER_YEAR,
+  SALARY_TIER_1,
+  SALARY_TIER_2,
+  SALARY_TIER_3,
+} from '@/lib/constants/defaults';
 import type { CareerLevel, Job } from '@/lib/db/airtable';
 import { useJobSearch } from '@/lib/hooks/useJobSearch';
 import { usePagination } from '@/lib/hooks/usePagination';
@@ -21,19 +28,91 @@ type JobsLayoutProps = {
   filteredJobs: Job[];
 };
 
+/** Returns true if the job's annual salary falls within one of the selected ranges. */
+function jobMatchesSalaryRange(job: Job, salaryRanges: string[]): boolean {
+  if (!job.salary) {
+    return false;
+  }
+
+  const annualSalary =
+    job.salary.max ??
+    (job.salary.min != null ? job.salary.min * HOURS_PER_YEAR : 0);
+
+  if (annualSalary === 0) {
+    return false;
+  }
+
+  if (salaryRanges.includes('< $50K') && annualSalary < SALARY_TIER_1) {
+    return true;
+  }
+  if (
+    salaryRanges.includes('$50K - $100K') &&
+    annualSalary >= SALARY_TIER_1 &&
+    annualSalary <= SALARY_TIER_2
+  ) {
+    return true;
+  }
+  if (
+    salaryRanges.includes('$100K - $200K') &&
+    annualSalary > SALARY_TIER_2 &&
+    annualSalary <= SALARY_TIER_3
+  ) {
+    return true;
+  }
+  return salaryRanges.includes('> $200K') && annualSalary > SALARY_TIER_3;
+}
+
+/** Filter jobs by employment type. */
+function applyTypeFilter(jobs: Job[], value: unknown): Job[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return jobs;
+  }
+  const jobTypes = value as JobType[];
+  return jobs.filter((job) => jobTypes.includes(job.type as JobType));
+}
+
+/** Filter jobs by career level. */
+function applyRoleFilter(jobs: Job[], value: unknown): Job[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return jobs;
+  }
+  const careerLevels = value as CareerLevel[];
+  return jobs.filter((job) =>
+    careerLevels.some((level) => job.career_level.includes(level))
+  );
+}
+
+/** Filter jobs by required language. */
+function applyLanguageFilter(jobs: Job[], value: unknown): Job[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return jobs;
+  }
+  const languageCodes = value as LanguageCode[];
+  return jobs.filter((job) =>
+    job.languages?.some((lang) => languageCodes.includes(lang as LanguageCode))
+  );
+}
+
+/** Filter jobs by salary range strings. */
+function applySalaryFilter(jobs: Job[], value: unknown): Job[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return jobs;
+  }
+  const salaryRanges = value as string[];
+  return jobs.filter((job) => jobMatchesSalaryRange(job, salaryRanges));
+}
+
 export function JobsLayout({ filteredJobs }: JobsLayoutProps) {
   const searchParams = useSearchParams();
   const { sortOrder } = useSortOrder();
   const { page } = usePagination();
   const { searchTerm } = useJobSearch();
 
-  // Filter state
   const [selectedJobs, setSelectedJobs] = useState<Job[]>(filteredJobs);
 
-  // Get URL params or defaults
-  const jobsPerPage = Number(searchParams.get('per_page')) || 10;
+  const jobsPerPage =
+    Number(searchParams.get('per_page')) || DEFAULT_PER_PAGE;
 
-  // Handle filter changes
   const handleFilterChange = useCallback(
     (
       filterType:
@@ -57,117 +136,29 @@ export function JobsLayout({ filteredJobs }: JobsLayoutProps) {
         return;
       }
 
-      // First apply search filter to the original filtered jobs
-      let newFilteredJobs = filterJobsBySearch(filteredJobs, searchTerm || '');
+      let jobs = filterJobsBySearch(filteredJobs, searchTerm ?? '');
 
-      // Apply type filter
-      if (filterType === 'type' && Array.isArray(value) && value.length > 0) {
-        // Type assertion to tell TypeScript this is a JobType array
-        const jobTypes = value as JobType[];
-        newFilteredJobs = newFilteredJobs.filter((job) =>
-          jobTypes.includes(job.type as JobType)
-        );
-      }
-
-      // Apply role/career level filter
-      if (filterType === 'role' && Array.isArray(value) && value.length > 0) {
-        // Type assertion to tell TypeScript this is a CareerLevel array
-        const careerLevels = value as CareerLevel[];
-        newFilteredJobs = newFilteredJobs.filter((job) =>
-          careerLevels.some((level) => job.career_level.includes(level))
-        );
-      }
-
-      // Apply remote filter
+      if (filterType === 'type') jobs = applyTypeFilter(jobs, value);
+      if (filterType === 'role') jobs = applyRoleFilter(jobs, value);
       if (filterType === 'remote' && value === true) {
-        newFilteredJobs = newFilteredJobs.filter(
-          (job) => job.workplace_type === 'Remote'
-        );
+        jobs = jobs.filter((job) => job.workplace_type === 'Remote');
       }
-
-      // Apply salary filter
-      if (filterType === 'salary' && Array.isArray(value) && value.length > 0) {
-        // Type assertion to tell TypeScript this is a string array
-        const salaryRanges = value as string[];
-        // Handle salary filtering logic here
-        newFilteredJobs = newFilteredJobs.filter((job) => {
-          if (!job.salary) {
-            return false;
-          }
-
-          // Calculate annual salary based on available data
-          let annualSalary = 0;
-          if (job.salary.max) {
-            annualSalary = job.salary.max;
-          } else if (job.salary.min) {
-            // If hourly, convert to annual (assuming 2080 hours per year)
-            annualSalary = job.salary.min * 2080;
-          }
-
-          if (annualSalary === 0) {
-            return false;
-          }
-
-          if (salaryRanges.includes('< $50K') && annualSalary < 50_000) {
-            return true;
-          }
-          if (
-            salaryRanges.includes('$50K - $100K') &&
-            annualSalary >= 50_000 &&
-            annualSalary <= 100_000
-          ) {
-            return true;
-          }
-          if (
-            salaryRanges.includes('$100K - $200K') &&
-            annualSalary > 100_000 &&
-            annualSalary <= 200_000
-          ) {
-            return true;
-          }
-          if (salaryRanges.includes('> $200K') && annualSalary > 200_000) {
-            return true;
-          }
-
-          return false;
-        });
-      }
-
-      // Apply visa filter
+      if (filterType === 'salary') jobs = applySalaryFilter(jobs, value);
       if (filterType === 'visa' && value === true) {
-        newFilteredJobs = newFilteredJobs.filter(
-          (job) => job.visa_sponsorship === 'Yes'
-        );
+        jobs = jobs.filter((job) => job.visa_sponsorship === 'Yes');
       }
+      if (filterType === 'language') jobs = applyLanguageFilter(jobs, value);
 
-      // Apply language filter
-      if (
-        filterType === 'language' &&
-        Array.isArray(value) &&
-        value.length > 0
-      ) {
-        // Type assertion to tell TypeScript this is a LanguageCode array
-        const languageCodes = value as LanguageCode[];
-        newFilteredJobs = newFilteredJobs.filter((job) =>
-          job.languages?.some((lang) =>
-            languageCodes.includes(lang as LanguageCode)
-          )
-        );
-      }
-
-      setSelectedJobs(newFilteredJobs);
+      setSelectedJobs(jobs);
     },
     [filteredJobs, searchTerm]
   );
 
-  // Apply search filter whenever the search term changes
   useEffect(() => {
-    // Reset filters and apply search
-    const searchFiltered = filterJobsBySearch(filteredJobs, searchTerm || '');
+    const searchFiltered = filterJobsBySearch(filteredJobs, searchTerm ?? '');
     setSelectedJobs(searchFiltered);
   }, [searchTerm, filteredJobs]);
 
-  // Sort jobs
   const sortedJobs = [...selectedJobs].sort((a, b) => {
     switch (sortOrder) {
       case 'oldest':
@@ -179,14 +170,13 @@ export function JobsLayout({ filteredJobs }: JobsLayoutProps) {
         const bMax = b.salary?.max || 0;
         return bMax - aMax;
       }
-      default: // newest
+      default:
         return (
           new Date(b.posted_date).getTime() - new Date(a.posted_date).getTime()
         );
     }
   });
 
-  // Pagination
   const startIndex = (page - 1) * jobsPerPage;
   const paginatedJobs = sortedJobs.slice(startIndex, startIndex + jobsPerPage);
 
@@ -227,7 +217,6 @@ export function JobsLayout({ filteredJobs }: JobsLayoutProps) {
             />
           )}
 
-          {/* Post Job Banner - Mobile only */}
           <div className="mt-8 lg:hidden">
             <PostJobBanner />
           </div>
@@ -248,7 +237,6 @@ export function JobsLayout({ filteredJobs }: JobsLayoutProps) {
               jobs={filteredJobs}
               onFilterChange={handleFilterChange}
             />
-            {/* Post Job Banner - Desktop only */}
             <div className="hidden lg:block">
               <PostJobBanner />
             </div>

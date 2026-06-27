@@ -9,6 +9,9 @@ import config from '@/config';
 import { useToast } from '@/hooks/use-toast';
 import { resolveColor } from '@/lib/utils/colors';
 
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const HTTP_STATUS_RATE_LIMIT = 429;
+
 export function JobAlertsForm() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -29,12 +32,11 @@ export function JobAlertsForm() {
     }
 
     // Validate email with regex
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!email) {
       newErrors.email =
         config.jobAlerts.form?.fields?.email?.required || 'Email is required';
       isValid = false;
-    } else if (!emailRegex.test(email)) {
+    } else if (!EMAIL_REGEX.test(email)) {
       newErrors.email =
         config.jobAlerts.form?.fields?.email?.invalid ||
         'Please enter a valid email address';
@@ -45,85 +47,79 @@ export function JobAlertsForm() {
     return isValid;
   };
 
+  const showSuccessToast = () => {
+    toast({
+      title:
+        config.jobAlerts.form?.toast?.success?.title ||
+        'Subscription successful!',
+      description:
+        config.jobAlerts.form?.toast?.success?.description ||
+        "You'll now receive job alerts in your inbox.",
+      variant: 'default',
+      className: 'bg-white border border-green-200 shadow-md',
+    });
+  };
+
+  const showRateLimitToast = () => {
+    toast({
+      title:
+        config.jobAlerts.form?.toast?.rateLimit?.title || 'Rate limit exceeded',
+      description:
+        config.jobAlerts.form?.toast?.rateLimit?.description ||
+        'Too many requests. Please try again later.',
+      variant: 'destructive',
+      className: 'bg-destructive border border-red-600 shadow-md',
+    });
+  };
+
+  const showErrorToast = (error: unknown) => {
+    if (error instanceof Error && error.message) {
+      toast({
+        title: 'Subscription failed',
+        description: error.message,
+        variant: 'destructive',
+        className: 'bg-destructive border border-red-600 shadow-md',
+      });
+    } else {
+      toast({
+        title:
+          config.jobAlerts.form?.toast?.error?.title || 'Something went wrong',
+        description:
+          config.jobAlerts.form?.toast?.error?.description ||
+          'Failed to subscribe to job alerts. Please try again.',
+        variant: 'destructive',
+        className: 'bg-destructive border border-red-600 shadow-md',
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSuccess) {
-      return;
-    }
-
-    // Validate form before submission
-    if (!validateForm()) {
+    if (isSuccess || !validateForm()) {
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Call our API route
       const response = await fetch('/api/subscribe', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email }),
       });
 
       const result = await response.json();
 
       if (response.ok && result.success) {
-        // Show success message
-        toast({
-          title:
-            config.jobAlerts.form?.toast?.success?.title ||
-            'Subscription successful!',
-          description:
-            config.jobAlerts.form?.toast?.success?.description ||
-            "You'll now receive job alerts in your inbox.",
-          variant: 'default',
-          className: 'bg-white border border-green-200 shadow-md',
-        });
-
-        // Set success state
+        showSuccessToast();
         setIsSuccess(true);
-      } else if (response.status === 429) {
-        // Rate limit error
-        toast({
-          title:
-            config.jobAlerts.form?.toast?.rateLimit?.title ||
-            'Rate limit exceeded',
-          description:
-            config.jobAlerts.form?.toast?.rateLimit?.description ||
-            'Too many requests. Please try again later.',
-          variant: 'destructive',
-          className: 'bg-destructive border border-red-600 shadow-md',
-        });
+      } else if (response.status === HTTP_STATUS_RATE_LIMIT) {
+        showRateLimitToast();
       } else {
         throw new Error(result.error || 'Subscription failed');
       }
-    } catch (
-      // biome-ignore lint/correctness/noUnusedVariables: Error variable needed for type safety
-      error: unknown
-    ) {
-      // Error handling - error variable is used for type safety but we don't need to use it directly in production
-      if (error instanceof Error && error.message) {
-        toast({
-          title: 'Subscription failed',
-          description: error.message,
-          variant: 'destructive',
-          className: 'bg-destructive border border-red-600 shadow-md',
-        });
-      } else {
-        toast({
-          title:
-            config.jobAlerts.form?.toast?.error?.title ||
-            'Something went wrong',
-          description:
-            config.jobAlerts.form?.toast?.error?.description ||
-            'Failed to subscribe to job alerts. Please try again.',
-          variant: 'destructive',
-          className: 'bg-destructive border border-red-600 shadow-md',
-        });
-      }
+    } catch (error: unknown) {
+      showErrorToast(error);
     } finally {
       setIsSubmitting(false);
     }

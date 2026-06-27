@@ -23,12 +23,139 @@ type HeroBackgroundImageConfig = {
   overlay?: HeroBackgroundImageOverlay;
 };
 
+const DEFAULT_OVERLAY_OPACITY = 0.7;
+
+type ResolvedHeroBackground = {
+  heroStyle: React.CSSProperties;
+  overlayStyle: React.CSSProperties;
+  hasOverlay: boolean;
+};
+
+type GradientConfig = {
+  enabled?: boolean;
+  type?: string;
+  direction?: string;
+  colors?: readonly string[];
+  stops?: readonly string[];
+};
+
+type HeroUiColors = {
+  backgroundColor: string;
+  titleColor: string;
+  subtitleColor: string;
+  badgeVariant: string;
+  badgeStyle: React.CSSProperties;
+  gradient: GradientConfig | undefined;
+  backgroundImage: HeroBackgroundImageConfig;
+  globalImage: HeroImageConfig | undefined;
+};
+
+/** Read and normalise all hero-related config values in one place. */
+function readHeroUiConfig(): HeroUiColors {
+  const ui = config.ui;
+  return {
+    backgroundColor: ui.heroBackgroundColor ?? '',
+    titleColor: ui.heroTitleColor ?? '',
+    subtitleColor: ui.heroSubtitleColor ?? '',
+    badgeVariant: ui.heroBadgeVariant ?? 'outline',
+    badgeStyle: {
+      backgroundColor: ui.heroBadgeBgColor || undefined,
+      color: ui.heroBadgeTextColor || undefined,
+      borderColor: ui.heroBadgeBorderColor || undefined,
+    },
+    gradient: ui.heroGradient as GradientConfig | undefined,
+    backgroundImage: ui.heroBackgroundImage as HeroBackgroundImageConfig,
+    globalImage: ui.heroImage as HeroImageConfig | undefined,
+  };
+}
+
+/** Build a CSS gradient string from a gradient config, or return empty string. */
+function computeGradient(heroGradient: GradientConfig): string {
+  if (!(heroGradient.enabled && heroGradient.colors?.length)) {
+    return '';
+  }
+
+  const { type, direction, colors, stops } = heroGradient;
+  const colorStops = colors
+    .map((color, index) => {
+      const stop = stops?.[index] ? ` ${stops[index]}` : '';
+      return `${color}${stop}`;
+    })
+    .join(', ');
+
+  if (type === 'linear') {
+    return `linear-gradient(${direction ?? 'to right'}, ${colorStops})`;
+  }
+  if (type === 'radial') {
+    return `radial-gradient(${direction ?? 'circle'}, ${colorStops})`;
+  }
+  return '';
+}
+
+/** Resolve overlay style from a background-image overlay config. */
+function buildOverlayStyle(
+  overlay: HeroBackgroundImageOverlay | undefined
+): React.CSSProperties | null {
+  if (!(overlay?.enabled && overlay.color)) {
+    return null;
+  }
+  return {
+    backgroundColor: overlay.color,
+    opacity:
+      overlay.opacity !== undefined ? overlay.opacity : DEFAULT_OVERLAY_OPACITY,
+  };
+}
+
+function resolveHeroBackground(
+  heroBackgroundImage: HeroBackgroundImageConfig | undefined,
+  heroGradient: GradientConfig | undefined,
+  heroBackgroundColor: string
+): ResolvedHeroBackground {
+  if (heroBackgroundImage?.enabled && heroBackgroundImage.src) {
+    const heroStyle: React.CSSProperties = {
+      backgroundImage: `url(${heroBackgroundImage.src})`,
+      backgroundPosition: heroBackgroundImage.position ?? 'center',
+      backgroundSize: heroBackgroundImage.size ?? 'cover',
+      backgroundRepeat: 'no-repeat',
+      position: 'relative',
+    };
+
+    const overlayStyle = buildOverlayStyle(heroBackgroundImage.overlay);
+    if (overlayStyle) {
+      return { heroStyle, overlayStyle, hasOverlay: true };
+    }
+
+    return { heroStyle, overlayStyle: {}, hasOverlay: false };
+  }
+
+  if (heroGradient) {
+    const gradient = computeGradient(heroGradient);
+    if (gradient) {
+      return {
+        heroStyle: { background: gradient },
+        overlayStyle: {},
+        hasOverlay: false,
+      };
+    }
+  }
+
+  if (heroBackgroundColor) {
+    return {
+      heroStyle: { backgroundColor: heroBackgroundColor },
+      overlayStyle: {},
+      hasOverlay: false,
+    };
+  }
+
+  return { heroStyle: {}, overlayStyle: {}, hasOverlay: false };
+}
+
 type HeroSectionProps = {
   badge: string;
   title: string;
   description: string;
   children?: React.ReactNode;
-  heroImage?: HeroImageConfig; // Add per-page hero image configuration
+  heroImage?: HeroImageConfig;
 };
 
 export function HeroSection({
@@ -38,80 +165,27 @@ export function HeroSection({
   children,
   heroImage,
 }: HeroSectionProps) {
-  // Get the hero background color from config if available
-  const heroBackgroundColor = config?.ui?.heroBackgroundColor || '';
-  const heroTitleColor = config?.ui?.heroTitleColor || '';
-  const heroSubtitleColor = config?.ui?.heroSubtitleColor || '';
-  const heroBadgeVariant = config?.ui?.heroBadgeVariant || 'outline';
-  const heroBadgeBgColor = config?.ui?.heroBadgeBgColor || '';
-  const heroBadgeTextColor = config?.ui?.heroBadgeTextColor || '';
-  const heroBadgeBorderColor = config?.ui?.heroBadgeBorderColor || '';
-  const heroGradient = config?.ui?.heroGradient;
-  const heroBackgroundImage = config?.ui
-    ?.heroBackgroundImage as HeroBackgroundImageConfig;
+  const {
+    backgroundColor,
+    titleColor,
+    subtitleColor,
+    badgeVariant,
+    badgeStyle,
+    gradient,
+    backgroundImage,
+    globalImage,
+  } = readHeroUiConfig();
 
-  // Use page-specific hero image config if provided, otherwise fall back to global config
-  const heroImageConfig = heroImage || config?.ui?.heroImage;
+  const heroImageConfig = heroImage ?? globalImage;
 
-  // Create background style based on image, gradient, or solid color (in order of precedence)
-  let heroStyle: React.CSSProperties = {};
-  let overlayStyle: React.CSSProperties = {};
-  let hasOverlay = false;
-
-  // Image background takes precedence over gradient and solid color
-  if (heroBackgroundImage?.enabled && heroBackgroundImage.src) {
-    heroStyle = {
-      backgroundImage: `url(${heroBackgroundImage.src})`,
-      backgroundPosition: heroBackgroundImage.position || 'center',
-      backgroundSize: heroBackgroundImage.size || 'cover',
-      backgroundRepeat: 'no-repeat',
-      position: 'relative', // Required for overlay positioning
-    };
-
-    // Add overlay if enabled
-    if (
-      heroBackgroundImage.overlay?.enabled &&
-      heroBackgroundImage.overlay.color
-    ) {
-      hasOverlay = true;
-      overlayStyle = {
-        backgroundColor: heroBackgroundImage.overlay.color,
-        opacity:
-          heroBackgroundImage.overlay.opacity !== undefined
-            ? heroBackgroundImage.overlay.opacity
-            : 0.7,
-      };
-    }
-  }
-  // Gradient takes precedence over solid color if image is not enabled
-  else if (heroGradient?.enabled && heroGradient.colors?.length) {
-    const { type, direction, colors, stops } = heroGradient;
-    const colorStops = colors
-      .map((color, index) => {
-        const stop = stops?.[index] ? ` ${stops[index]}` : '';
-        return `${color}${stop}`;
-      })
-      .join(', ');
-
-    if (type === 'linear') {
-      heroStyle = {
-        background: `linear-gradient(${
-          direction || 'to right'
-        }, ${colorStops})`,
-      };
-    } else if (type === 'radial') {
-      heroStyle = {
-        background: `radial-gradient(${direction || 'circle'}, ${colorStops})`,
-      };
-    }
-  } else if (heroBackgroundColor) {
-    // Apply solid background color if neither image nor gradient is enabled
-    heroStyle = { backgroundColor: heroBackgroundColor };
-  }
+  const { heroStyle, overlayStyle, hasOverlay } = resolveHeroBackground(
+    backgroundImage,
+    gradient,
+    backgroundColor
+  );
 
   return (
     <div className="relative overflow-hidden border-b" style={heroStyle}>
-      {/* Overlay for background image if needed */}
       {hasOverlay && (
         <div
           aria-hidden="true"
@@ -125,12 +199,8 @@ export function HeroSection({
             <div className="space-y-2 sm:space-y-3">
               <Badge
                 className="mb-1"
-                style={{
-                  backgroundColor: heroBadgeBgColor || undefined,
-                  color: heroBadgeTextColor || undefined,
-                  borderColor: heroBadgeBorderColor || undefined,
-                }}
-                variant={heroBadgeVariant}
+                style={badgeStyle}
+                variant={badgeVariant}
               >
                 {badge}
               </Badge>
@@ -138,13 +208,13 @@ export function HeroSection({
                 className={cn(
                   'font-bold text-2xl tracking-tight sm:text-3xl md:text-4xl'
                 )}
-                style={{ color: heroTitleColor || undefined }}
+                style={{ color: titleColor || undefined }}
               >
                 {title}
               </h1>
               <p
                 className={cn('text-muted-foreground text-sm md:text-base')}
-                style={{ color: heroSubtitleColor || undefined }}
+                style={{ color: subtitleColor || undefined }}
               >
                 {description}
               </p>
