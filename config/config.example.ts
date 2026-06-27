@@ -28,7 +28,7 @@ import type { CurrencyCode } from '@/lib/constants/currencies';
 export type FontFamily = 'geist' | 'inter' | 'ibm-plex-serif';
 
 // Hero image configuration
-type HeroImageConfig = {
+export type HeroImageConfig = {
   enabled: boolean;
   src?: string;
   alt?: string;
@@ -78,7 +78,7 @@ type CustomScript = {
 };
 
 // Plan type for pricing configuration
-type PricingPlan = {
+export type PricingPlan = {
   name: string;
   price: number;
   billingTerm: string;
@@ -105,7 +105,7 @@ type FAQItem = {
 };
 
 // FAQ category type for FAQ configuration
-type FAQCategory = {
+export type FAQCategory = {
   title: string;
   items: FAQItem[];
 };

@@ -33,6 +33,7 @@ export async function getJobBySlugMinimal(
 
     return null;
   } catch (error) {
+    // biome-ignore lint/suspicious/noConsole: server-side diagnostic
     console.error('Error finding job by slug:', error);
     return null;
   }
@@ -59,6 +60,7 @@ export async function validateJobAndParams(context: {
 
     return { job };
   } catch (error) {
+    // biome-ignore lint/suspicious/noConsole: server-side diagnostic
     console.error('Error validating job parameters:', error);
     return new Response('Invalid request parameters', { status: 400 });
   }

@@ -41,6 +41,7 @@ const PaginationLink = ({
   className,
   isActive,
   size = 'icon',
+  href,
   ...props
 }: PaginationLinkProps) => (
   <a
@@ -53,6 +54,7 @@ const PaginationLink = ({
       'h-7 text-xs',
       className
     )}
+    href={href}
     {...props}
   />
 );

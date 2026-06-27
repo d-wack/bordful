@@ -369,11 +369,11 @@ export function Footer() {
 
   // Add custom columns from config
   if (Array.isArray(config.footer.columns)) {
-    config.footer.columns.forEach((column: FooterColumnConfig) => {
+    for (const column of config.footer.columns as FooterColumnConfig[]) {
       if (column.show) {
         // Skip job feeds columns if RSS is disabled
         if (column.type === 'feeds' && !rssEnabled) {
-          return;
+          continue;
         }
 
         // Prepare links array, potentially with auto-added feature links
@@ -442,7 +442,7 @@ export function Footer() {
               : renderLinksColumn(column.title, links),
         });
       }
-    });
+    }
   }
 
   // Sort columns by their order value and filter out hidden columns

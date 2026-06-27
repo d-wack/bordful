@@ -1,12 +1,6 @@
 import { ImageResponse } from 'next/og';
 import config from '@/config';
-import {
-  getFontFamilyCSS,
-  getFontInfo,
-  loadGoogleFontData,
-  prepareImageResponseFonts,
-} from '@/lib/utils/font-utils';
-import { fetchImageAsDataURI } from '@/lib/utils/image-utils';
+import type { ImageResponseFont } from '@/lib/utils/font-utils';
 import type { MinimalJob } from '@/lib/utils/job-validation';
 import {
   createLinearGradient,
@@ -71,7 +65,7 @@ export function createJobOGConfig(job: MinimalJob): JobProcessedOGConfig {
 export async function createJobOGImageResponse(
   config: JobProcessedOGConfig,
   fontFamilyCSS: string,
-  imageResponseFonts: any[],
+  imageResponseFonts: ImageResponseFont[],
   bgImageDataUri: string,
   logoDataUri: string
 ): Promise<ImageResponse> {

@@ -395,11 +395,11 @@ export function JobFilters({
 
       roles: jobs.reduce(
         (acc, job) => {
-          job.career_level.forEach((level) => {
+          for (const level of job.career_level) {
             if (level !== 'NotSpecified') {
               acc[level] = (acc[level] || 0) + 1;
             }
-          });
+          }
           return acc;
         },
         {} as Record<CareerLevel, number>
@@ -436,9 +436,9 @@ export function JobFilters({
 
       languages: jobs.reduce(
         (acc, job) => {
-          job.languages?.forEach((lang) => {
+          for (const lang of job.languages ?? []) {
             acc[lang] = (acc[lang] || 0) + 1;
-          });
+          }
           return acc;
         },
         {} as Record<LanguageCode, number>
@@ -480,6 +480,7 @@ export function JobFilters({
             aria-expanded={isExpanded}
             className="flex items-center text-sm text-zinc-900 md:hidden"
             onClick={() => setIsExpanded(!isExpanded)}
+            type="button"
           >
             {isExpanded ? (
               <ChevronUp className="h-4 w-4" />
@@ -494,6 +495,7 @@ export function JobFilters({
         <button
           className="text-sm text-zinc-900 underline underline-offset-4 transition-colors hover:text-zinc-700"
           onClick={handleClearFilters}
+          type="button"
         >
           Clear all
         </button>
@@ -547,6 +549,7 @@ export function JobFilters({
           <button
             className="text-sm text-zinc-900 underline underline-offset-4 transition-colors hover:text-zinc-700"
             onClick={() => setShowAllLevels(!showAllLevels)}
+            type="button"
           >
             {showAllLevels ? 'Show fewer levels' : 'Show more levels'}
           </button>
@@ -615,6 +618,7 @@ export function JobFilters({
             <button
               className="text-sm text-zinc-900 underline underline-offset-4 transition-colors hover:text-zinc-700"
               onClick={() => setShowAllLanguages(!showAllLanguages)}
+              type="button"
             >
               {showAllLanguages
                 ? 'Show fewer languages'

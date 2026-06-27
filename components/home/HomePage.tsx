@@ -12,6 +12,13 @@ import { PaginationControl } from '@/components/ui/pagination-control';
 import { PostJobBanner } from '@/components/ui/post-job-banner';
 import { SortOrderSelect } from '@/components/ui/sort-order-select';
 import config from '@/config';
+import {
+  DEFAULT_PER_PAGE,
+  DEFAULT_TRENDING_COMPANIES,
+  SALARY_TIER_1,
+  SALARY_TIER_2,
+  SALARY_TIER_3,
+} from '@/lib/constants/defaults';
 import type { LanguageCode } from '@/lib/constants/languages';
 import type { CareerLevel, Job } from '@/lib/db/airtable';
 import { normalizeAnnualSalary } from '@/lib/db/airtable';
@@ -39,6 +46,219 @@ type FilterType =
   | 'clear';
 type FilterValue = string[] | boolean | CareerLevel[] | LanguageCode[] | true;
 
+const CLEARED_FILTERS: Filters = {
+  types: [],
+  roles: [],
+  remote: false,
+  salaryRanges: [],
+  visa: false,
+  languages: [],
+};
+
+/** Returns true when a job's annual salary falls within the given salary range string. */
+function jobInSalaryRange(annualSalary: number, range: string): boolean {
+  switch (range) {
+    case '< $50K':
+      return annualSalary < SALARY_TIER_1;
+    case '$50K - $100K':
+      return annualSalary >= SALARY_TIER_1 && annualSalary <= SALARY_TIER_2;
+    case '$100K - $200K':
+      return annualSalary > SALARY_TIER_2 && annualSalary <= SALARY_TIER_3;
+    case '> $200K':
+      return annualSalary > SALARY_TIER_3;
+    default:
+      return false;
+  }
+}
+
+/** Apply all active filters and sort order to produce a display-ready job list. */
+function computeFilteredJobs(
+  initialJobs: Job[],
+  searchTerm: string | null,
+  filters: Filters,
+  sortOrder: string
+): Job[] {
+  let filtered = filterJobsBySearch([...initialJobs], searchTerm ?? '');
+
+  if (filters.types.length > 0) {
+    filtered = filtered.filter((job) => filters.types.includes(job.type));
+  }
+
+  if (filters.roles.length > 0) {
+    filtered = filtered.filter(
+      (job) =>
+        job.career_level &&
+        filters.roles.some((role) => job.career_level.includes(role))
+    );
+  }
+
+  if (filters.remote) {
+    filtered = filtered.filter((job) => job.workplace_type === 'Remote');
+  }
+
+  if (filters.visa) {
+    filtered = filtered.filter((job) => job.visa_sponsorship === 'Yes');
+  }
+
+  if (filters.salaryRanges.length > 0) {
+    filtered = filtered.filter((job) => {
+      if (!job.salary) {
+        return false;
+      }
+      const annualSalary = normalizeAnnualSalary(job.salary);
+      return filters.salaryRanges.some((range) =>
+        jobInSalaryRange(annualSalary, range)
+      );
+    });
+  }
+
+  if (filters.languages.length > 0) {
+    filtered = filtered.filter(
+      (job) =>
+        job.languages?.length > 0 &&
+        filters.languages.some((lang) => job.languages.includes(lang))
+    );
+  }
+
+  applySortOrder(filtered, sortOrder);
+  return filtered;
+}
+
+const SALARY_MISSING = -1;
+
+/** Compare two jobs by annual salary, sorting jobs without salary to the bottom. */
+function compareSalary(a: Job, b: Job): number {
+  const salaryA = a.salary ? normalizeAnnualSalary(a.salary) : SALARY_MISSING;
+  const salaryB = b.salary ? normalizeAnnualSalary(b.salary) : SALARY_MISSING;
+  if (salaryA === SALARY_MISSING && salaryB === SALARY_MISSING) {
+    return 0;
+  }
+  if (salaryA === SALARY_MISSING) {
+    return 1;
+  }
+  if (salaryB === SALARY_MISSING) {
+    return -1;
+  }
+  return salaryB - salaryA;
+}
+
+/** Sort a job array in-place by the selected sort order. */
+function applySortOrder(jobs: Job[], sortOrder: string): void {
+  switch (sortOrder) {
+    case 'oldest':
+      jobs.sort(
+        (a, b) =>
+          new Date(a.posted_date).getTime() - new Date(b.posted_date).getTime()
+      );
+      break;
+    case 'salary':
+      jobs.sort(compareSalary);
+      break;
+    default: // newest
+      jobs.sort(
+        (a, b) =>
+          new Date(b.posted_date).getTime() - new Date(a.posted_date).getTime()
+      );
+  }
+}
+
+/** Sort jobs by featured status first, then by sort order. */
+function sortByFeaturedAndOrder(jobs: Job[], sortOrder: string): Job[] {
+  return [...jobs].sort((a, b) => {
+    if (a.featured !== b.featured) {
+      return a.featured ? -1 : 1;
+    }
+    switch (sortOrder) {
+      case 'newest':
+        return (
+          new Date(b.posted_date).getTime() - new Date(a.posted_date).getTime()
+        );
+      case 'oldest':
+        return (
+          new Date(a.posted_date).getTime() - new Date(b.posted_date).getTime()
+        );
+      case 'salary': {
+        const aSalary = a.salary ? normalizeAnnualSalary(a.salary) : 0;
+        const bSalary = b.salary ? normalizeAnnualSalary(b.salary) : 0;
+        return bSalary - aSalary;
+      }
+      default:
+        return 0;
+    }
+  });
+}
+
+/**
+ * Apply a single filter change to the previous filters state.
+ * Returns the new `Filters` object or `prev` unchanged if no update is needed.
+ */
+function applyFilterChange(
+  prev: Filters,
+  filterType: FilterType,
+  value: FilterValue
+): Filters {
+  const next = { ...prev };
+  switch (filterType) {
+    case 'type':
+      if (
+        Array.isArray(value) &&
+        JSON.stringify(value) !== JSON.stringify(prev.types)
+      ) {
+        next.types = value;
+      } else {
+        return prev;
+      }
+      break;
+    case 'role':
+      if (
+        Array.isArray(value) &&
+        JSON.stringify(value) !== JSON.stringify(prev.roles)
+      ) {
+        next.roles = value as CareerLevel[];
+      } else {
+        return prev;
+      }
+      break;
+    case 'remote':
+      if (typeof value === 'boolean' && value !== prev.remote) {
+        next.remote = value;
+      } else {
+        return prev;
+      }
+      break;
+    case 'salary':
+      if (
+        Array.isArray(value) &&
+        JSON.stringify(value) !== JSON.stringify(prev.salaryRanges)
+      ) {
+        next.salaryRanges = value;
+      } else {
+        return prev;
+      }
+      break;
+    case 'visa':
+      if (typeof value === 'boolean' && value !== prev.visa) {
+        next.visa = value;
+      } else {
+        return prev;
+      }
+      break;
+    case 'language':
+      if (
+        Array.isArray(value) &&
+        JSON.stringify(value) !== JSON.stringify(prev.languages)
+      ) {
+        next.languages = value as LanguageCode[];
+      } else {
+        return prev;
+      }
+      break;
+    default:
+      return prev;
+  }
+  return next;
+}
+
 function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -47,60 +267,49 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
   const { page } = usePagination();
 
   // Parse initial filters from URL
-  const initialFilters = {
-    types: searchParams.get('types')?.split(',').filter(Boolean) || [],
-    roles: (searchParams.get('roles')?.split(',').filter(Boolean) ||
+  const initialFilters: Filters = {
+    types: searchParams.get('types')?.split(',').filter(Boolean) ?? [],
+    roles: (searchParams.get('roles')?.split(',').filter(Boolean) ??
       []) as CareerLevel[],
     remote: searchParams.get('remote') === 'true',
-    salaryRanges: searchParams.get('salary')?.split(',').filter(Boolean) || [],
+    salaryRanges: searchParams.get('salary')?.split(',').filter(Boolean) ?? [],
     visa: searchParams.get('visa') === 'true',
-    languages: (searchParams.get('languages')?.split(',').filter(Boolean) ||
+    languages: (searchParams.get('languages')?.split(',').filter(Boolean) ??
       []) as LanguageCode[],
   };
 
-  const [filters, setFilters] = useState<Filters>({
-    types: initialFilters?.types || [],
-    roles: initialFilters?.roles || [],
-    remote: initialFilters?.remote,
-    salaryRanges: initialFilters?.salaryRanges || [],
-    visa: initialFilters?.visa,
-    languages: initialFilters?.languages || ([] as LanguageCode[]),
-  });
+  const [filters, setFilters] = useState<Filters>(initialFilters);
   const [pendingUrlUpdate, setPendingUrlUpdate] = useState<Record<
     string,
     string | null
   > | null>(null);
 
-  // Get jobs per page from URL or default
-  const jobsPerPage = Number.parseInt(searchParams.get('per_page') || '10', 10);
+  const jobsPerPage =
+    Number.parseInt(searchParams.get('per_page') ?? '', 10) || DEFAULT_PER_PAGE;
 
-  // Update URL with new parameters
   const updateParams = useCallback((updates: Record<string, string | null>) => {
     setPendingUrlUpdate(updates);
   }, []);
 
-  // Handle URL updates
   useEffect(() => {
-    if (pendingUrlUpdate) {
-      const params = new URLSearchParams(searchParams);
-
-      Object.entries(pendingUrlUpdate).forEach(([key, value]) => {
-        if (value === null) {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      });
-
-      router.replace(`/?${params.toString()}`, { scroll: false });
-      setPendingUrlUpdate(null);
+    if (!pendingUrlUpdate) {
+      return;
     }
+    const params = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(pendingUrlUpdate)) {
+      if (value === null) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    }
+    router.replace(`/?${params.toString()}`, { scroll: false });
+    setPendingUrlUpdate(null);
   }, [pendingUrlUpdate, router, searchParams]);
 
-  // Update URL when filters change
   const updateFilterParams = useCallback(
     (newFilters: Filters) => {
-      const updates: Record<string, string | null> = {
+      updateParams({
         types: newFilters.types.length ? newFilters.types.join(',') : null,
         roles: newFilters.roles.length ? newFilters.roles.join(',') : null,
         remote: newFilters.remote ? 'true' : null,
@@ -111,10 +320,8 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
         languages: newFilters.languages.length
           ? newFilters.languages.join(',')
           : null,
-        page: '1', // Reset to first page when filters change
-      };
-
-      updateParams(updates);
+        page: '1',
+      });
     },
     [updateParams]
   );
@@ -122,244 +329,56 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
   const handleFilterChange = useCallback(
     (filterType: FilterType, value: FilterValue) => {
       if (filterType === 'clear') {
-        const clearedFilters = {
-          types: [],
-          roles: [] as CareerLevel[],
-          remote: false,
-          salaryRanges: [],
-          visa: false,
-          languages: [],
-        };
-        setFilters(clearedFilters);
-        updateFilterParams(clearedFilters);
+        setFilters(CLEARED_FILTERS);
+        updateFilterParams(CLEARED_FILTERS);
         return;
       }
-
       setFilters((prev) => {
-        const newFilters = { ...prev };
-
-        switch (filterType) {
-          case 'type':
-            if (
-              Array.isArray(value) &&
-              JSON.stringify(value) !== JSON.stringify(prev.types)
-            ) {
-              newFilters.types = value;
-            } else {
-              return prev;
-            }
-            break;
-          case 'role':
-            if (
-              Array.isArray(value) &&
-              JSON.stringify(value) !== JSON.stringify(prev.roles)
-            ) {
-              newFilters.roles = value as CareerLevel[];
-            } else {
-              return prev;
-            }
-            break;
-          case 'remote':
-            if (typeof value === 'boolean' && value !== prev.remote) {
-              newFilters.remote = value;
-            } else {
-              return prev;
-            }
-            break;
-          case 'salary':
-            if (
-              Array.isArray(value) &&
-              JSON.stringify(value) !== JSON.stringify(prev.salaryRanges)
-            ) {
-              newFilters.salaryRanges = value;
-            } else {
-              return prev;
-            }
-            break;
-          case 'visa':
-            if (typeof value === 'boolean' && value !== prev.visa) {
-              newFilters.visa = value;
-            } else {
-              return prev;
-            }
-            break;
-          case 'language':
-            if (
-              Array.isArray(value) &&
-              JSON.stringify(value) !== JSON.stringify(prev.languages)
-            ) {
-              newFilters.languages = value as LanguageCode[];
-            } else {
-              return prev;
-            }
-            break;
+        const next = applyFilterChange(prev, filterType, value);
+        if (next !== prev) {
+          updateFilterParams(next);
         }
-
-        updateFilterParams(newFilters);
-        return newFilters;
+        return next;
       });
     },
     [updateFilterParams]
   );
 
-  // Sort and filter jobs
-  const filteredJobs = useMemo(() => {
-    let filtered = [...initialJobs];
+  const filteredJobs = useMemo(
+    () => computeFilteredJobs(initialJobs, searchTerm, filters, sortOrder),
+    [initialJobs, searchTerm, filters, sortOrder]
+  );
 
-    // Apply search filter using our utility function
-    filtered = filterJobsBySearch(filtered, searchTerm || '');
+  const sortedJobs = useMemo(
+    () => sortByFeaturedAndOrder(filteredJobs, sortOrder),
+    [filteredJobs, sortOrder]
+  );
 
-    // Apply job type filter
-    if (filters.types.length > 0) {
-      filtered = filtered.filter((job) => filters.types.includes(job.type));
-    }
-
-    // Apply career level filter
-    if (filters.roles.length > 0) {
-      filtered = filtered.filter((job) => {
-        if (!job.career_level) {
-          return false;
-        }
-        return filters.roles.some((role) => job.career_level.includes(role));
-      });
-    }
-
-    // Apply remote filter
-    if (filters.remote) {
-      filtered = filtered.filter((job) => job.workplace_type === 'Remote');
-    }
-
-    // Apply visa sponsorship filter
-    if (filters.visa) {
-      filtered = filtered.filter((job) => job.visa_sponsorship === 'Yes');
-    }
-
-    // Apply salary range filter
-    if (filters.salaryRanges.length > 0) {
-      filtered = filtered.filter((job) => {
-        if (!job.salary) {
-          return false;
-        }
-        const annualSalary = normalizeAnnualSalary(job.salary);
-
-        return filters.salaryRanges.some((range) => {
-          switch (range) {
-            case '< $50K':
-              return annualSalary < 50_000;
-            case '$50K - $100K':
-              return annualSalary >= 50_000 && annualSalary <= 100_000;
-            case '$100K - $200K':
-              return annualSalary > 100_000 && annualSalary <= 200_000;
-            case '> $200K':
-              return annualSalary > 200_000;
-            default:
-              return false;
-          }
-        });
-      });
-    }
-
-    // Apply language filter
-    if (filters.languages.length > 0) {
-      filtered = filtered.filter((job) => {
-        if (!job.languages || job.languages.length === 0) {
-          return false;
-        }
-        return filters.languages.some((lang) => job.languages.includes(lang));
-      });
-    }
-
-    // Apply sorting
-    switch (sortOrder) {
-      case 'oldest':
-        filtered.sort(
-          (a, b) =>
-            new Date(a.posted_date).getTime() -
-            new Date(b.posted_date).getTime()
-        );
-        break;
-      case 'salary':
-        filtered.sort((a, b) => {
-          const salaryA = a.salary ? normalizeAnnualSalary(a.salary) : -1;
-          const salaryB = b.salary ? normalizeAnnualSalary(b.salary) : -1;
-
-          if (salaryA === -1 && salaryB === -1) {
-            return 0;
-          }
-          if (salaryA === -1) {
-            return 1;
-          }
-          if (salaryB === -1) {
-            return -1;
-          }
-          return salaryB - salaryA;
-        });
-        break;
-      default: // "newest"
-        filtered.sort(
-          (a, b) =>
-            new Date(b.posted_date).getTime() -
-            new Date(a.posted_date).getTime()
-        );
-    }
-
-    return filtered;
-  }, [initialJobs, searchTerm, sortOrder, filters]);
-
-  // Sort jobs based on selected option and featured status
-  const sortedJobs = useMemo(() => {
-    // First sort by featured status, then by the selected sort option
-    return [...filteredJobs].sort((a, b) => {
-      // First compare by featured status
-      if (a.featured !== b.featured) {
-        return a.featured ? -1 : 1;
-      }
-
-      // Then apply the selected sort for jobs with the same featured status
-      switch (sortOrder) {
-        case 'newest':
-          return (
-            new Date(b.posted_date).getTime() -
-            new Date(a.posted_date).getTime()
-          );
-        case 'oldest':
-          return (
-            new Date(a.posted_date).getTime() -
-            new Date(b.posted_date).getTime()
-          );
-        case 'salary': {
-          const aSalary = a.salary ? normalizeAnnualSalary(a.salary) : 0;
-          const bSalary = b.salary ? normalizeAnnualSalary(b.salary) : 0;
-          return bSalary - aSalary;
-        }
-        default:
-          return 0;
-      }
-    });
-  }, [filteredJobs, sortOrder]);
-
-  // Calculate pagination
   const startIndex = (page - 1) * jobsPerPage;
   const paginatedJobs = sortedJobs.slice(startIndex, startIndex + jobsPerPage);
 
-  // Get the most recent job's posted date (timestamp or null)
   const lastUpdatedTimestamp = useMemo(() => {
     if (initialJobs.length === 0) {
       return null;
     }
-
-    const mostRecentDate = Math.max(
+    return Math.max(
       ...initialJobs.map((job) => new Date(job.posted_date).getTime())
     );
-
-    return mostRecentDate; // Return the timestamp
   }, [initialJobs]);
 
-  // Calculate jobs added today
-  const jobsAddedToday = useMemo(() => {
-    return initialJobs.filter((job) => isToday(new Date(job.posted_date)))
-      .length;
-  }, [initialJobs]);
+  const jobsAddedToday = useMemo(
+    () =>
+      initialJobs.filter((job) => isToday(new Date(job.posted_date))).length,
+    [initialJobs]
+  );
+
+  // Scroll to category - keeping this for potential future use
+  const _scrollToCategory = (categoryId: string) => {
+    const el = document.getElementById(categoryId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -367,30 +386,22 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
         badge={config.badge}
         description={config.description}
         title={config.title}
-        // Will use the global config.ui.heroImage since we're not specifying a custom one
       >
-        {/* Search Bar - Replace with our new component */}
         <div className="max-w-[480px]">
           <JobSearchInput />
         </div>
 
-        {/* Quick Stats - Reverted to original structure with color customization */}
         {(config.quickStats?.enabled ?? true) && (
           <div
             className="mt-6 grid max-w-[480px] grid-cols-3 gap-4 text-muted-foreground text-xs"
-            // Apply base color here, specific elements might override
             style={{ color: config.ui.heroStatsColor || undefined }}
           >
-            {/* Open Jobs */}
             {(config.quickStats?.sections?.openJobs?.enabled ?? true) && (
               <div>
                 <div
                   className="font-medium text-foreground"
-                  // Override title color if heroStatsColor is set
                   style={{
-                    color:
-                      config.ui.heroStatsColor ||
-                      undefined /* Default: text-foreground */,
+                    color: config.ui.heroStatsColor || undefined,
                   }}
                 >
                   {config.quickStats?.sections?.openJobs?.title || 'Open Jobs'}
@@ -402,17 +413,12 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
                     jobsAddedToday > 0 && (
                       <span className="pulse-dot mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
                     )}
-                  <span /* Value inherits color from parent div */>
-                    {initialJobs.length.toLocaleString()}
-                  </span>
+                  <span>{initialJobs.length.toLocaleString()}</span>
                   {(config.quickStats?.sections?.openJobs
                     ?.showNewJobsIndicator ??
                     true) &&
                     jobsAddedToday > 0 && (
-                      <span
-                        className="ml-1"
-                        /* Added today text inherits color */
-                      >
+                      <span className="ml-1">
                         ({jobsAddedToday.toLocaleString()} added today)
                       </span>
                     )}
@@ -420,22 +426,19 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
               </div>
             )}
 
-            {/* Last Updated */}
             {(config.quickStats?.sections?.lastUpdated?.enabled ?? true) &&
-              lastUpdatedTimestamp && ( // Ensure timestamp exists
+              lastUpdatedTimestamp && (
                 <div>
                   <div
                     className="font-medium text-foreground"
                     style={{
-                      color:
-                        config.ui.heroStatsColor ||
-                        undefined /* Default: text-foreground */,
+                      color: config.ui.heroStatsColor || undefined,
                     }}
                   >
                     {config.quickStats?.sections?.lastUpdated?.title ||
                       'Last Updated'}
                   </div>
-                  <div /* Value inherits color */>
+                  <div>
                     {formatDistanceToNow(new Date(lastUpdatedTimestamp), {
                       addSuffix: true,
                     })}
@@ -443,24 +446,22 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
                 </div>
               )}
 
-            {/* Trending Companies */}
             {(config.quickStats?.sections?.trending?.enabled ?? true) && (
               <div>
                 <div
                   className="font-medium text-foreground"
                   style={{
-                    color:
-                      config.ui.heroStatsColor ||
-                      undefined /* Default: text-foreground */,
+                    color: config.ui.heroStatsColor || undefined,
                   }}
                 >
                   {config.quickStats?.sections?.trending?.title || 'Trending'}
                 </div>
-                <div /* Value inherits color */>
+                <div>
                   {Array.from(new Set(initialJobs.map((job) => job.company)))
                     .slice(
                       0,
-                      config.quickStats?.sections?.trending?.maxCompanies || 3
+                      config.quickStats?.sections?.trending?.maxCompanies ||
+                        DEFAULT_TRENDING_COMPANIES
                     )
                     .join(', ')}
                 </div>
@@ -509,7 +510,6 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
               )}
             </div>
 
-            {/* Pagination with optimized range */}
             {sortedJobs.length > jobsPerPage && (
               <PaginationControl
                 itemsPerPage={jobsPerPage}
@@ -517,7 +517,6 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
               />
             )}
 
-            {/* Post Job Banner - Mobile only */}
             <div className="mt-8 md:hidden">
               <PostJobBanner />
             </div>
@@ -531,7 +530,6 @@ function HomePageContent({ initialJobs }: { initialJobs: Job[] }) {
                 jobs={initialJobs}
                 onFilterChange={handleFilterChange}
               />
-              {/* Post Job Banner - Desktop only */}
               <div className="hidden md:block">
                 <PostJobBanner />
               </div>

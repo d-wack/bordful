@@ -273,14 +273,14 @@ function useDropdownMenu() {
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      Object.entries(dropdownRefs.current).forEach(([label, ref]) => {
+      for (const [label, ref] of Object.entries(dropdownRefs.current)) {
         if (ref && !ref.contains(event.target as Node)) {
           setOpenDropdowns((prev) => ({
             ...prev,
             [label]: false,
           }));
         }
-      });
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -407,6 +407,7 @@ export function Nav() {
                   : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
               } transition-colors`}
               onClick={() => toggleDropdown(item.label)}
+              type="button"
             >
               {item.label}
               <ChevronDown aria-hidden="true" className="ml-1 h-3 w-3" />
@@ -524,6 +525,7 @@ export function Nav() {
               aria-label="Toggle menu"
               className="p-2 text-zinc-600 transition-colors hover:text-zinc-900"
               onClick={() => setIsOpen(!isOpen)}
+              type="button"
             >
               {isOpen ? (
                 <X aria-hidden="true" className="h-4 w-4" />

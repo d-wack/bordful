@@ -22,6 +22,44 @@ type PaginationControlProps = {
   className?: string;
 };
 
+type PageOrEllipsis = number | string;
+
+/**
+ * Build a compact pagination range with ellipsis markers.
+ * Returns page numbers interspersed with '...' strings where gaps exist.
+ */
+function getPaginationRange(current: number, total: number): PageOrEllipsis[] {
+  const delta = PAGINATION_DELTA;
+  const range: number[] = [];
+
+  for (let i = 1; i <= total; i++) {
+    if (
+      i === 1 ||
+      i === total ||
+      (i >= current - delta && i <= current + delta)
+    ) {
+      range.push(i);
+    }
+  }
+
+  const rangeWithDots: PageOrEllipsis[] = [];
+  let prev: number | undefined;
+
+  for (const i of range) {
+    if (prev !== undefined) {
+      if (i - prev === PAGINATION_DELTA + 1) {
+        rangeWithDots.push(prev + 1);
+      } else if (i - prev !== 1) {
+        rangeWithDots.push(`ellipsis-after-${prev}`);
+      }
+    }
+    rangeWithDots.push(i);
+    prev = i;
+  }
+
+  return rangeWithDots;
+}
+
 export function PaginationControl({
   totalItems,
   itemsPerPage,
@@ -32,44 +70,10 @@ export function PaginationControl({
 
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-  // Don't render pagination if there's only one page
   if (totalPages <= 1) {
     return null;
   }
 
-  // Calculate pagination range
-  const getPaginationRange = (current: number, total: number) => {
-    const delta = PAGINATION_DELTA;
-    const range = [];
-    const rangeWithDots = [];
-    let l;
-
-    for (let i = 1; i <= total; i++) {
-      if (
-        i === 1 ||
-        i === total ||
-        (i >= current - delta && i <= current + delta)
-      ) {
-        range.push(i);
-      }
-    }
-
-    for (const i of range) {
-      if (l) {
-        if (i - l === PAGINATION_DELTA + 1) {
-          rangeWithDots.push(l + 1);
-        } else if (i - l !== 1) {
-          rangeWithDots.push('...');
-        }
-      }
-      rangeWithDots.push(i);
-      l = i;
-    }
-
-    return rangeWithDots;
-  };
-
-  // Handle page change
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages || newPage === page) {
       return;
@@ -78,11 +82,9 @@ export function PaginationControl({
     setIsUpdating(true);
     setPage(newPage);
 
-    // Add a small delay to show loading state
     setTimeout(() => setIsUpdating(false), LOADING_STATE_DELAY);
   };
 
-  // Ensure current page is valid
   if (page < 1 || (totalPages > 0 && page > totalPages)) {
     setPage(Math.max(1, Math.min(page, totalPages)));
     return null;
@@ -112,9 +114,9 @@ export function PaginationControl({
               />
             </PaginationItem>
 
-            {getPaginationRange(page, totalPages).map((pageNum, idx) =>
-              pageNum === '...' ? (
-                <PaginationItem key={`ellipsis-${idx}`}>
+            {getPaginationRange(page, totalPages).map((pageNum) =>
+              typeof pageNum === 'string' ? (
+                <PaginationItem key={pageNum}>
                   <PaginationEllipsis />
                 </PaginationItem>
               ) : (

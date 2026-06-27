@@ -1,7 +1,10 @@
+import type { VariantProps } from 'class-variance-authority';
 import Image from 'next/image';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type badgeVariants } from '@/components/ui/badge';
 import config from '@/config';
 import { cn } from '@/lib/utils';
+
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>;
 
 type HeroImageConfig = {
   enabled?: boolean;
@@ -43,7 +46,7 @@ type HeroUiColors = {
   backgroundColor: string;
   titleColor: string;
   subtitleColor: string;
-  badgeVariant: string;
+  badgeVariant: BadgeVariant;
   badgeStyle: React.CSSProperties;
   gradient: GradientConfig | undefined;
   backgroundImage: HeroBackgroundImageConfig;
@@ -57,7 +60,7 @@ function readHeroUiConfig(): HeroUiColors {
     backgroundColor: ui.heroBackgroundColor ?? '',
     titleColor: ui.heroTitleColor ?? '',
     subtitleColor: ui.heroSubtitleColor ?? '',
-    badgeVariant: ui.heroBadgeVariant ?? 'outline',
+    badgeVariant: (ui.heroBadgeVariant ?? 'outline') as BadgeVariant,
     badgeStyle: {
       backgroundColor: ui.heroBadgeBgColor || undefined,
       color: ui.heroBadgeTextColor || undefined,
@@ -197,11 +200,7 @@ export function HeroSection({
         <div className="flex flex-col items-center gap-4 md:flex-row md:gap-8 lg:gap-12">
           <div className="w-full space-y-3 px-4 sm:space-y-4 sm:px-0 md:w-1/2">
             <div className="space-y-2 sm:space-y-3">
-              <Badge
-                className="mb-1"
-                style={badgeStyle}
-                variant={badgeVariant}
-              >
+              <Badge className="mb-1" style={badgeStyle} variant={badgeVariant}>
                 {badge}
               </Badge>
               <h1

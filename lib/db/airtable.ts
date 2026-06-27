@@ -116,7 +116,7 @@ export function formatSalary(
   };
 
   // Handle single value cases (only min or only max)
-  let range;
+  let range: string | undefined;
   if (salary.min && salary.max) {
     // Determine the appropriate scale for both values based on the larger number
     let forceScale: 'k' | 'M' | undefined;

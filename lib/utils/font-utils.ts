@@ -1,11 +1,10 @@
+import type { ImageResponse } from 'next/og';
 import { FONT_URL_REGEX, WHITESPACE_REGEX } from '@/lib/constants/defaults';
 
-export type ImageResponseFont = {
-  name: string;
-  data: ArrayBuffer | Uint8Array;
-  weight?: number;
-  style?: string;
-};
+// Re-export the exact FontOptions shape that next/og's ImageResponse constructor expects
+export type ImageResponseFont = NonNullable<
+  NonNullable<ConstructorParameters<typeof ImageResponse>[1]>['fonts']
+>[number];
 
 export type FontInfo = {
   familyName: string;
@@ -71,6 +70,7 @@ export async function loadGoogleFontData(
 
     return await fontResponse.arrayBuffer();
   } catch (error: unknown) {
+    // biome-ignore lint/suspicious/noConsole: server-side diagnostic
     console.error('Error loading Google Font:', error);
     return null;
   }
@@ -82,7 +82,7 @@ export async function loadGoogleFontData(
 export function prepareImageResponseFonts(
   fontFamily: string,
   fontData: ArrayBuffer | null,
-  textToRender: string
+  _textToRender: string
 ): ImageResponseFont[] {
   const fonts: ImageResponseFont[] = [];
 

@@ -9,7 +9,16 @@ import type {
   WithContext,
 } from 'schema-dts';
 import config from '@/config';
+import {
+  DEFAULT_EXPERIENCE_MONTHS,
+  DEFAULT_VALIDITY_DAYS,
+  MONTHS_PER_YEAR,
+} from '@/lib/constants/defaults';
 import type { Job, Salary } from '@/lib/db/airtable';
+
+// Regex patterns compiled once at module level for performance
+const YEARS_PATTERN_REGEX = /(\d+)(?:\s*\+|\s*-\s*\d+)?\s*years?/;
+const MONTHS_PATTERN_REGEX = /(\d+)(?:\s*\+|\s*-\s*\d+)?\s*months?/;
 
 // Utility functions for schema formatting
 function formatJobLocationType(job: Job): string | null {
@@ -182,17 +191,13 @@ function parseExperienceMonths(
   }
 
   // Look for years pattern (e.g., "2+ years", "2-3 years", "minimum 2 years")
-  const yearsMatch = experienceText
-    .toLowerCase()
-    .match(/(\d+)(?:\s*\+|\s*-\s*\d+)?\s*years?/);
+  const yearsMatch = YEARS_PATTERN_REGEX.exec(experienceText.toLowerCase());
   if (yearsMatch?.[1]) {
-    return Number.parseInt(yearsMatch[1], 10) * 12; // Convert years to months
+    return Number.parseInt(yearsMatch[1], 10) * MONTHS_PER_YEAR;
   }
 
   // Look for months pattern (e.g., "6 months", "6+ months")
-  const monthsMatch = experienceText
-    .toLowerCase()
-    .match(/(\d+)(?:\s*\+|\s*-\s*\d+)?\s*months?/);
+  const monthsMatch = MONTHS_PATTERN_REGEX.exec(experienceText.toLowerCase());
   if (monthsMatch?.[1]) {
     return Number.parseInt(monthsMatch[1], 10);
   }
@@ -234,56 +239,19 @@ function parseEducationCredential(
   return 'EducationalOccupationalCredential';
 }
 
-export function JobSchema({ job, slug }: JobSchemaProps) {
-  // Format base URL for absolute links
-  const baseUrl =
-    config.url || process.env.NEXT_PUBLIC_APP_URL || 'https://bordful.com';
+/** Build the conditional (optional) fields for the JobPosting schema object. */
+function buildJobSchemaOptionalProps(job: Job): Record<string, unknown> {
+  const locationType = formatJobLocationType(job);
+  const location = formatLocation(job);
+  const applicantReqs = formatApplicantLocationRequirements(job);
+  const salary = formatSalaryForSchema(job.salary);
 
-  // Use slug to create the job URL
-  const jobUrl = `${baseUrl}/jobs/${slug}`;
+  const visaText =
+    job.visa_sponsorship === 'Yes'
+      ? 'Visa sponsorship is available for this position.'
+      : 'Visa sponsorship is not available for this position.';
 
-  // Calculate valid through date if not provided (default to configured days from posted date or 30 days)
-  const postDate = new Date(job.posted_date);
-  const isValidPostDate = !Number.isNaN(postDate.getTime());
-
-  // Use current date if posted_date is invalid
-  const safePostDate = isValidPostDate ? postDate : new Date();
-  const defaultValidThrough = new Date(safePostDate);
-
-  // Use config value or fallback to 30 days
-  const validityDays = config.jobListings?.defaultValidityDays ?? 30;
-  defaultValidThrough.setDate(defaultValidThrough.getDate() + validityDays);
-
-  // Only add valid_through if the job has it (will need to be added to Airtable)
-  const validThrough = (() => {
-    if (job.valid_through) {
-      const validThroughDate = new Date(job.valid_through);
-      return Number.isNaN(validThroughDate.getTime())
-        ? defaultValidThrough.toISOString()
-        : validThroughDate.toISOString();
-    }
-    return defaultValidThrough.toISOString();
-  })();
-
-  // Create schema data object
-  // Use a record approach first to collect all properties
-  const jobPostingData: Record<string, unknown> = {
-    '@context': 'https://schema.org',
-    '@type': 'JobPosting',
-    title: job.title,
-    description: job.description,
-    datePosted: safePostDate.toISOString(),
-    validThrough,
-    url: jobUrl,
-    hiringOrganization: {
-      '@type': 'Organization',
-      name: job.company,
-    } as Organization,
-
-    // Employment type
-    employmentType: formatEmploymentType(job.type),
-
-    // Optional properties with conditional rendering to avoid null values
+  return {
     ...(job.job_identifier && {
       identifier: {
         '@type': 'PropertyValue',
@@ -291,34 +259,11 @@ export function JobSchema({ job, slug }: JobSchemaProps) {
         value: job.job_identifier,
       },
     }),
-
-    // For remote jobs
-    ...(formatJobLocationType(job) && {
-      jobLocationType: formatJobLocationType(job),
-    }),
-
-    // Location handling - only add if not null
-    ...(formatLocation(job) && {
-      jobLocation: formatLocation(job),
-    }),
-
-    // Applicant location requirements - only add if not null
-    ...(formatApplicantLocationRequirements(job) && {
-      applicantLocationRequirements: formatApplicantLocationRequirements(job),
-    }),
-
-    // Salary information - only add if not null
-    ...(formatSalaryForSchema(job.salary) && {
-      baseSalary: formatSalaryForSchema(job.salary),
-    }),
-
-    // Always set directApply to false since we always link to external application forms
-    directApply: false,
-
-    // Add skills and requirements when available
-    ...(hasContent(job.skills) && {
-      skills: job.skills,
-    }),
+    ...(locationType && { jobLocationType: locationType }),
+    ...(location && { jobLocation: location }),
+    ...(applicantReqs && { applicantLocationRequirements: applicantReqs }),
+    ...(salary && { baseSalary: salary }),
+    ...(hasContent(job.skills) && { skills: job.skills }),
     ...(hasContent(job.qualifications) && {
       qualifications: job.qualifications,
     }),
@@ -334,35 +279,66 @@ export function JobSchema({ job, slug }: JobSchemaProps) {
       experienceRequirements: {
         '@type': 'OccupationalExperienceRequirements',
         monthsOfExperience:
-          parseExperienceMonths(job.experience_requirements) || 12,
+          parseExperienceMonths(job.experience_requirements) ||
+          DEFAULT_EXPERIENCE_MONTHS,
       },
     }),
-
-    // Add industry classification when available
-    ...(hasContent(job.industry) && {
-      industry: job.industry,
-    }),
+    ...(hasContent(job.industry) && { industry: job.industry }),
     ...(hasContent(job.occupational_category) && {
       occupationalCategory: job.occupational_category,
     }),
-
-    // Add job benefits when available
-    ...(hasContent(job.benefits) && {
-      jobBenefits: job.benefits,
-    }),
-
-    // Add responsibilities if available (might be extracted from description in the future)
+    ...(hasContent(job.benefits) && { jobBenefits: job.benefits }),
     ...(hasContent(job.responsibilities) && {
       responsibilities: job.responsibilities,
     }),
-
-    // Add visa sponsorship information
     ...(job.visa_sponsorship !== 'Not specified' && {
-      eligibilityToWorkRequirement:
-        job.visa_sponsorship === 'Yes'
-          ? 'Visa sponsorship is available for this position.'
-          : 'Visa sponsorship is not available for this position.',
+      eligibilityToWorkRequirement: visaText,
     }),
+  };
+}
+
+/** Resolve the validThrough ISO string from a job and its default expiry date. */
+function resolveValidThrough(job: Job, defaultValidThrough: Date): string {
+  if (!job.valid_through) {
+    return defaultValidThrough.toISOString();
+  }
+  const validThroughDate = new Date(job.valid_through);
+  return Number.isNaN(validThroughDate.getTime())
+    ? defaultValidThrough.toISOString()
+    : validThroughDate.toISOString();
+}
+
+export function JobSchema({ job, slug }: JobSchemaProps) {
+  const baseUrl =
+    config.url || process.env.NEXT_PUBLIC_APP_URL || 'https://bordful.com';
+
+  const jobUrl = `${baseUrl}/jobs/${slug}`;
+
+  const postDate = new Date(job.posted_date);
+  const safePostDate = Number.isNaN(postDate.getTime()) ? new Date() : postDate;
+
+  const defaultValidThrough = new Date(safePostDate);
+  const validityDays =
+    config.jobListings?.defaultValidityDays ?? DEFAULT_VALIDITY_DAYS;
+  defaultValidThrough.setDate(defaultValidThrough.getDate() + validityDays);
+
+  const validThrough = resolveValidThrough(job, defaultValidThrough);
+
+  const jobPostingData: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'JobPosting',
+    title: job.title,
+    description: job.description,
+    datePosted: safePostDate.toISOString(),
+    validThrough,
+    url: jobUrl,
+    hiringOrganization: {
+      '@type': 'Organization',
+      name: job.company,
+    } as Organization,
+    employmentType: formatEmploymentType(job.type),
+    directApply: false,
+    ...buildJobSchemaOptionalProps(job),
   };
 
   // Cast the complete data object to the schema-dts type for type safety at compile time

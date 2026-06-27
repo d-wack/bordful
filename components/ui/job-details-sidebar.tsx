@@ -49,6 +49,12 @@ type JobDetailsSidebarProps = {
   job_source_name: string | null;
 };
 
+type DeadlineInfo = {
+  fullDate: string;
+  relativeTime: string;
+  isPastDeadline: boolean;
+};
+
 function formatCareerLevel(level: CareerLevel): string {
   const formatMap: Record<CareerLevel, string> = {
     Internship: 'Internship',
@@ -73,6 +79,82 @@ function formatCareerLevel(level: CareerLevel): string {
   };
 
   return formatMap[level] || level;
+}
+
+/** Parse `valid_through` into a user-readable deadline info object. */
+function resolveDeadline(validThrough: string | null): DeadlineInfo | null {
+  if (!validThrough) {
+    return null;
+  }
+
+  const deadlineDate = new Date(validThrough);
+  const isPastDeadline = deadlineDate < new Date();
+  const relativeDeadline = formatDistanceToNow(deadlineDate, {
+    addSuffix: false,
+  });
+
+  return {
+    fullDate: deadlineDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }),
+    relativeTime: isPastDeadline
+      ? `${relativeDeadline} ago`
+      : `in ${relativeDeadline}`,
+    isPastDeadline,
+  };
+}
+
+/** Map a WorkplaceType value to the badge `type` prop expected by `<JobBadge>`. */
+function resolveWorkplaceBadgeType(
+  workplaceType: WorkplaceType
+): 'not specified' | 'onsite' | 'remote' | 'hybrid' | 'default' {
+  if (workplaceType === 'Not specified') {
+    return 'not specified';
+  }
+  if (workplaceType === 'On-site') {
+    return 'onsite';
+  }
+  return workplaceType.toLowerCase() as 'remote' | 'hybrid' | 'default';
+}
+
+/** Map a visa-sponsorship string to the badge `type` prop. */
+function resolveVisaBadgeType(
+  visa: string
+): 'visa-yes' | 'visa-no' | 'visa-not-specified' {
+  if (visa === 'Yes') {
+    return 'visa-yes';
+  }
+  if (visa === 'No') {
+    return 'visa-no';
+  }
+  return 'visa-not-specified';
+}
+
+/** Render the job-location row content based on workplace type. */
+function renderLocationContent(
+  workplaceType: WorkplaceType,
+  remoteRegion: RemoteRegion,
+  location: string
+): React.ReactNode {
+  if (workplaceType === 'Remote') {
+    return (
+      <span className="ml-6 text-gray-600 text-sm">
+        Remote ({remoteRegion || 'Worldwide'})
+      </span>
+    );
+  }
+  if (workplaceType === 'Hybrid') {
+    return (
+      <span className="ml-6 text-gray-600 text-sm">
+        {[location, `Hybrid (${remoteRegion})`].filter(Boolean).join(', ')}
+      </span>
+    );
+  }
+  return (
+    <p className="ml-6 text-gray-600 text-sm">{location || 'Not specified'}</p>
+  );
 }
 
 export function JobDetailsSidebar({
@@ -101,41 +183,10 @@ export function JobDetailsSidebar({
     new Set(Array.isArray(career_level) ? career_level : [career_level])
   );
 
-  // Format location
   const location = [workplace_city, workplace_country]
     .filter(Boolean)
     .join(', ');
-
-  // Format the application deadline if available
-  const formatDeadline = () => {
-    if (!valid_through) {
-      return null;
-    }
-
-    const deadlineDate = new Date(valid_through);
-    const now = new Date();
-    const isPastDeadline = deadlineDate < now;
-
-    // Calculate relative time to deadline
-    const relativeDeadline = formatDistanceToNow(deadlineDate, {
-      addSuffix: false,
-    });
-
-    // Format the date to a user-friendly string
-    return {
-      fullDate: deadlineDate.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }),
-      relativeTime: isPastDeadline
-        ? `${relativeDeadline} ago`
-        : `in ${relativeDeadline}`,
-      isPastDeadline,
-    };
-  };
-
-  const deadline = formatDeadline();
+  const deadline = resolveDeadline(valid_through);
 
   return (
     <div className="space-y-4 rounded-lg border bg-gray-50 p-5">
@@ -196,19 +247,7 @@ export function JobDetailsSidebar({
           <MapPin className="h-4 w-4 shrink-0 text-gray-500" />
           <h3 className="font-medium text-sm">Job Location</h3>
         </div>
-        {workplace_type === 'Remote' ? (
-          <span className="ml-6 text-gray-600 text-sm">
-            Remote ({remote_region || 'Worldwide'})
-          </span>
-        ) : workplace_type === 'Hybrid' ? (
-          <span className="ml-6 text-gray-600 text-sm">
-            {[location, `Hybrid (${remote_region})`].filter(Boolean).join(', ')}
-          </span>
-        ) : (
-          <p className="ml-6 text-gray-600 text-sm">
-            {location || 'Not specified'}
-          </p>
-        )}
+        {renderLocationContent(workplace_type, remote_region, location)}
       </div>
 
       <div>
@@ -217,18 +256,7 @@ export function JobDetailsSidebar({
           <h3 className="font-medium text-sm">Workplace Type</h3>
         </div>
         <div className="ml-6">
-          <JobBadge
-            type={
-              workplace_type === 'Not specified'
-                ? 'not specified'
-                : workplace_type === 'On-site'
-                  ? 'onsite'
-                  : (workplace_type.toLowerCase() as
-                      | 'remote'
-                      | 'hybrid'
-                      | 'default')
-            }
-          >
+          <JobBadge type={resolveWorkplaceBadgeType(workplace_type)}>
             {workplace_type}
           </JobBadge>
         </div>
@@ -257,14 +285,14 @@ export function JobDetailsSidebar({
           <h3 className="font-medium text-sm">Career Level</h3>
         </div>
         <div className="ml-6 flex flex-wrap gap-1.5">
-          {careerLevels.map((level, index) => (
+          {careerLevels.map((level) => (
             <JobBadge
               href={
                 level !== 'NotSpecified'
                   ? `/jobs/level/${level.toLowerCase()}`
                   : undefined
               }
-              key={`${level}-${index}`}
+              key={level}
               type="career-level"
             >
               {formatCareerLevel(level)}
@@ -307,15 +335,7 @@ export function JobDetailsSidebar({
           <h3 className="font-medium text-sm">Visa Sponsorship</h3>
         </div>
         <div className="ml-6">
-          <JobBadge
-            type={
-              visa_sponsorship === 'Yes'
-                ? 'visa-yes'
-                : visa_sponsorship === 'No'
-                  ? 'visa-no'
-                  : 'visa-not-specified'
-            }
-          >
+          <JobBadge type={resolveVisaBadgeType(visa_sponsorship)}>
             {visa_sponsorship}
           </JobBadge>
         </div>
@@ -332,7 +352,7 @@ export function JobDetailsSidebar({
       </div>
 
       {/* Languages */}
-      {languages && languages.length > 0 && (
+      {languages.length > 0 && (
         <div>
           <div className="mb-1 flex items-center gap-2">
             <Languages className="h-4 w-4 shrink-0 text-gray-500" />

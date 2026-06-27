@@ -64,6 +64,12 @@ export const MONTHS_PER_YEAR = 12;
 export const DEFAULT_VALIDITY_DAYS = 30;
 export const DEFAULT_EXPERIENCE_MONTHS = 12;
 
+// UI display defaults
+export const DEFAULT_TRENDING_COMPANIES = 3; // max companies shown in hero stats
+
+// Delay (ms) before scrolling to an anchor-linked FAQ category after page load
+export const SEARCH_EXPAND_DELAY_MS = 100;
+
 // Regex patterns for performance optimization
 export const FONT_URL_REGEX =
   /src: url\((.+?)\) format\('(opentype|truetype)'\)/;

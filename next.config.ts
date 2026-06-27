@@ -4,7 +4,6 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  // biome-ignore lint/suspicious/useAwait: Next.js types require headers() to be async
   async headers() {
     return [
       {

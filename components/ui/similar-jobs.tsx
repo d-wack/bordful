@@ -2,28 +2,54 @@ import Link from 'next/link';
 import type { Job } from '@/lib/db/airtable';
 import { generateJobSlug } from '@/lib/utils/slugify';
 
+const MIN_TITLE_WORD_LENGTH = 3;
+const MAX_SIMILAR_JOBS = 5;
+
 type SimilarJobsProps = {
   currentJob: Job;
   allJobs: Job[];
 };
 
+/** Derive a human-readable location string for a job card. */
+function resolveJobLocation(job: Job): string | null {
+  if (job.workplace_type === 'Remote') {
+    if (job.remote_region) {
+      return `Remote (${job.remote_region})`;
+    }
+    return null;
+  }
+  if (job.workplace_type === 'Hybrid') {
+    return (
+      [
+        job.workplace_city,
+        job.workplace_country,
+        job.remote_region ? `Hybrid (${job.remote_region})` : null,
+      ]
+        .filter(Boolean)
+        .join(', ') || null
+    );
+  }
+  return (
+    [job.workplace_city, job.workplace_country].filter(Boolean).join(', ') ||
+    null
+  );
+}
+
 export function SimilarJobs({ currentJob, allJobs }: SimilarJobsProps) {
-  // Filter similar jobs based on title, location, or company
+  const titleWords = currentJob.title.toLowerCase().split(' ');
+
   const similarJobs = allJobs
     .filter((job) => {
-      // Exclude current job
       if (job.id === currentJob.id) {
         return false;
       }
 
-      // Check if job title contains similar keywords or is in same location
-      const titleWords = currentJob.title.toLowerCase().split(' ');
       const jobTitleLower = job.title.toLowerCase();
       const isSimilarTitle = titleWords.some(
-        (word) => word.length > 3 && jobTitleLower.includes(word)
+        (word) =>
+          word.length > MIN_TITLE_WORD_LENGTH && jobTitleLower.includes(word)
       );
 
-      // Compare workplace location
       const isSameLocation =
         (job.workplace_type === 'Remote' &&
           currentJob.workplace_type === 'Remote') ||
@@ -36,7 +62,7 @@ export function SimilarJobs({ currentJob, allJobs }: SimilarJobsProps) {
 
       return isSimilarTitle || isSameLocation;
     })
-    .slice(0, 5); // Show max 5 similar jobs
+    .slice(0, MAX_SIMILAR_JOBS);
 
   if (similarJobs.length === 0) {
     return null;
@@ -47,23 +73,7 @@ export function SimilarJobs({ currentJob, allJobs }: SimilarJobsProps) {
       <h2 className="mb-3 font-semibold text-lg">Similar Jobs</h2>
       <div className="space-y-3">
         {similarJobs.map((job) => {
-          // Format location based on workplace type
-          const location =
-            job.workplace_type === 'Remote'
-              ? job.remote_region
-                ? `Remote (${job.remote_region})`
-                : null
-              : job.workplace_type === 'Hybrid'
-                ? [
-                    job.workplace_city,
-                    job.workplace_country,
-                    job.remote_region ? `Hybrid (${job.remote_region})` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(', ') || null
-                : [job.workplace_city, job.workplace_country]
-                    .filter(Boolean)
-                    .join(', ') || null;
+          const location = resolveJobLocation(job);
 
           return (
             <Link

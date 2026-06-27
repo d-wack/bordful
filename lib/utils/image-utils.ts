@@ -1,3 +1,11 @@
+type LogoConfig = {
+  show?: boolean;
+  src?: string;
+  width?: number;
+  height?: number;
+  position?: { top: number; left: number };
+};
+
 /**
  * Fetch an image and convert it to a data URI string
  */
@@ -23,6 +31,7 @@ export async function fetchImageAsDataURI(
     return `data:${contentType};base64,${base64}`;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    // biome-ignore lint/suspicious/noConsole: server-side diagnostic
     console.error('Error fetching image:', errorMessage);
     return '';
   }
@@ -31,7 +40,10 @@ export async function fetchImageAsDataURI(
 /**
  * Validate and process logo configuration
  */
-export function processLogoConfig(logoConfig: any, baseUrl: string) {
+export function processLogoConfig(
+  logoConfig: LogoConfig | null | undefined,
+  baseUrl: string
+) {
   if (!(logoConfig?.show && logoConfig.src)) {
     return null;
   }

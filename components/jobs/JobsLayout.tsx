@@ -9,8 +9,6 @@ import { JobsPerPageSelect } from '@/components/ui/jobs-per-page-select';
 import { PaginationControl } from '@/components/ui/pagination-control';
 import { PostJobBanner } from '@/components/ui/post-job-banner';
 import { SortOrderSelect } from '@/components/ui/sort-order-select';
-import type { JobType } from '@/lib/constants/job-types';
-import type { LanguageCode } from '@/lib/constants/languages';
 import {
   DEFAULT_PER_PAGE,
   HOURS_PER_YEAR,
@@ -18,6 +16,8 @@ import {
   SALARY_TIER_2,
   SALARY_TIER_3,
 } from '@/lib/constants/defaults';
+import type { JobType } from '@/lib/constants/job-types';
+import type { LanguageCode } from '@/lib/constants/languages';
 import type { CareerLevel, Job } from '@/lib/db/airtable';
 import { useJobSearch } from '@/lib/hooks/useJobSearch';
 import { usePagination } from '@/lib/hooks/usePagination';
@@ -27,6 +27,22 @@ import { filterJobsBySearch } from '@/lib/utils/filter-jobs';
 type JobsLayoutProps = {
   filteredJobs: Job[];
 };
+
+type FilterType =
+  | 'type'
+  | 'role'
+  | 'remote'
+  | 'salary'
+  | 'visa'
+  | 'language'
+  | 'clear';
+type FilterValue =
+  | string[]
+  | boolean
+  | CareerLevel[]
+  | LanguageCode[]
+  | JobType[]
+  | true;
 
 /** Returns true if the job's annual salary falls within one of the selected ranges. */
 function jobMatchesSalaryRange(job: Job, salaryRanges: string[]): boolean {
@@ -63,7 +79,7 @@ function jobMatchesSalaryRange(job: Job, salaryRanges: string[]): boolean {
 }
 
 /** Filter jobs by employment type. */
-function applyTypeFilter(jobs: Job[], value: unknown): Job[] {
+function applyTypeFilter(jobs: Job[], value: FilterValue): Job[] {
   if (!Array.isArray(value) || value.length === 0) {
     return jobs;
   }
@@ -72,7 +88,7 @@ function applyTypeFilter(jobs: Job[], value: unknown): Job[] {
 }
 
 /** Filter jobs by career level. */
-function applyRoleFilter(jobs: Job[], value: unknown): Job[] {
+function applyRoleFilter(jobs: Job[], value: FilterValue): Job[] {
   if (!Array.isArray(value) || value.length === 0) {
     return jobs;
   }
@@ -83,7 +99,7 @@ function applyRoleFilter(jobs: Job[], value: unknown): Job[] {
 }
 
 /** Filter jobs by required language. */
-function applyLanguageFilter(jobs: Job[], value: unknown): Job[] {
+function applyLanguageFilter(jobs: Job[], value: FilterValue): Job[] {
   if (!Array.isArray(value) || value.length === 0) {
     return jobs;
   }
@@ -94,12 +110,47 @@ function applyLanguageFilter(jobs: Job[], value: unknown): Job[] {
 }
 
 /** Filter jobs by salary range strings. */
-function applySalaryFilter(jobs: Job[], value: unknown): Job[] {
+function applySalaryFilter(jobs: Job[], value: FilterValue): Job[] {
   if (!Array.isArray(value) || value.length === 0) {
     return jobs;
   }
   const salaryRanges = value as string[];
   return jobs.filter((job) => jobMatchesSalaryRange(job, salaryRanges));
+}
+
+/** Apply a single filter operation to a job list and return the updated list. */
+function computeFilteredJobs(
+  filterType: FilterType,
+  value: FilterValue,
+  filteredJobs: Job[],
+  searchTerm: string
+): Job[] {
+  if (filterType === 'clear') {
+    return filteredJobs;
+  }
+
+  let jobs = filterJobsBySearch(filteredJobs, searchTerm);
+
+  if (filterType === 'type') {
+    jobs = applyTypeFilter(jobs, value);
+  }
+  if (filterType === 'role') {
+    jobs = applyRoleFilter(jobs, value);
+  }
+  if (filterType === 'remote' && value === true) {
+    jobs = jobs.filter((job) => job.workplace_type === 'Remote');
+  }
+  if (filterType === 'salary') {
+    jobs = applySalaryFilter(jobs, value);
+  }
+  if (filterType === 'visa' && value === true) {
+    jobs = jobs.filter((job) => job.visa_sponsorship === 'Yes');
+  }
+  if (filterType === 'language') {
+    jobs = applyLanguageFilter(jobs, value);
+  }
+
+  return jobs;
 }
 
 export function JobsLayout({ filteredJobs }: JobsLayoutProps) {
@@ -110,46 +161,13 @@ export function JobsLayout({ filteredJobs }: JobsLayoutProps) {
 
   const [selectedJobs, setSelectedJobs] = useState<Job[]>(filteredJobs);
 
-  const jobsPerPage =
-    Number(searchParams.get('per_page')) || DEFAULT_PER_PAGE;
+  const jobsPerPage = Number(searchParams.get('per_page')) || DEFAULT_PER_PAGE;
 
   const handleFilterChange = useCallback(
-    (
-      filterType:
-        | 'type'
-        | 'role'
-        | 'remote'
-        | 'salary'
-        | 'visa'
-        | 'language'
-        | 'clear',
-      value:
-        | string[]
-        | boolean
-        | CareerLevel[]
-        | LanguageCode[]
-        | JobType[]
-        | true
-    ) => {
-      if (filterType === 'clear') {
-        setSelectedJobs(filteredJobs);
-        return;
-      }
-
-      let jobs = filterJobsBySearch(filteredJobs, searchTerm ?? '');
-
-      if (filterType === 'type') jobs = applyTypeFilter(jobs, value);
-      if (filterType === 'role') jobs = applyRoleFilter(jobs, value);
-      if (filterType === 'remote' && value === true) {
-        jobs = jobs.filter((job) => job.workplace_type === 'Remote');
-      }
-      if (filterType === 'salary') jobs = applySalaryFilter(jobs, value);
-      if (filterType === 'visa' && value === true) {
-        jobs = jobs.filter((job) => job.visa_sponsorship === 'Yes');
-      }
-      if (filterType === 'language') jobs = applyLanguageFilter(jobs, value);
-
-      setSelectedJobs(jobs);
+    (filterType: FilterType, value: FilterValue) => {
+      setSelectedJobs(
+        computeFilteredJobs(filterType, value, filteredJobs, searchTerm ?? '')
+      );
     },
     [filteredJobs, searchTerm]
   );

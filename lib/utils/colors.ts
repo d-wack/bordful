@@ -240,9 +240,6 @@ export function resolveColor(color?: string): string {
   }
 
   // If not found or not a valid pattern, return the original or default
-  // Only log a warning in development
-  if (process.env.NODE_ENV === 'development') {
-  }
 
   return color || DEFAULT_COLOR;
 }

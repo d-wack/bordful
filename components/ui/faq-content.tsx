@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import config from '@/config';
+import { SEARCH_EXPAND_DELAY_MS } from '@/lib/constants/defaults';
 import { resolveColor } from '@/lib/utils/colors';
 import { slugify } from '@/lib/utils/slugify';
 
@@ -135,7 +136,7 @@ export function FAQContent({ categories }: FAQContentProps) {
             setExpandedItems(itemIds);
           }
         }
-      }, 100);
+      }, SEARCH_EXPAND_DELAY_MS);
 
       return () => clearTimeout(timerId);
     }
@@ -175,7 +176,6 @@ export function FAQContent({ categories }: FAQContentProps) {
   };
 
   // Scroll to category - keeping this for potential future use
-  // biome-ignore lint/correctness/noUnusedVariables: Function kept for future use
   const _scrollToCategory = (categoryId: string) => {
     const element = document.getElementById(categoryId);
     if (element) {
@@ -228,6 +228,7 @@ export function FAQContent({ categories }: FAQContentProps) {
                 setExpandedItems([]);
                 router.replace('/faq', { scroll: false });
               }}
+              type="button"
             >
               <X className="h-4 w-4" />
             </button>
@@ -255,13 +256,13 @@ export function FAQContent({ categories }: FAQContentProps) {
             </Button>
           </div>
         ) : (
-          filteredCategories.map((category, categoryIndex) => {
+          filteredCategories.map((category) => {
             const categoryId = slugify(category.title);
             return (
               <div
                 className="space-y-4"
                 id={categoryId}
-                key={categoryIndex}
+                key={categoryId}
                 ref={(el) => {
                   categoryRefs.current[categoryId] = el;
                 }}
@@ -280,6 +281,7 @@ export function FAQContent({ categories }: FAQContentProps) {
                       // You could add a toast notification here
                     }}
                     title="Copy link to this section"
+                    type="button"
                   >
                     <LinkIcon className="h-4 w-4" />
                   </button>
@@ -290,12 +292,12 @@ export function FAQContent({ categories }: FAQContentProps) {
                   type="multiple"
                   value={expandedItems}
                 >
-                  {category.items.map((item, itemIndex) => {
+                  {category.items.map((item) => {
                     const itemId = getItemId(category.title, item.question);
                     return (
                       <AccordionItem
                         className="overflow-hidden rounded-lg border border-zinc-200 px-4"
-                        key={itemIndex}
+                        key={itemId}
                         value={itemId}
                       >
                         <AccordionTrigger className="py-4 font-medium text-sm text-zinc-800 hover:no-underline">
@@ -307,8 +309,9 @@ export function FAQContent({ categories }: FAQContentProps) {
                               <ReactMarkdown
                                 components={{
                                   // Apply primary color to all links in markdown content
-                                  a: ({ ...props }) => (
+                                  a: ({ href, ...props }) => (
                                     <a
+                                      href={href}
                                       {...props}
                                       className="underline transition-opacity hover:opacity-80"
                                       style={{

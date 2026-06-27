@@ -7,6 +7,7 @@ import {
 import {
   getFontFamilyCSS,
   getFontInfo,
+  type ImageResponseFont,
   loadGoogleFontData,
   prepareImageResponseFonts,
 } from '@/lib/utils/font-utils';
@@ -94,7 +95,9 @@ export async function prepareOGAssets(parsedConfig: ProcessedOGConfig) {
 export async function prepareBackgroundImage(
   backgroundImage?: string | null
 ): Promise<string> {
-  if (!backgroundImage) return '';
+  if (!backgroundImage) {
+    return '';
+  }
 
   return await fetchImageAsDataURI(backgroundImage, config.url);
 }
@@ -105,7 +108,7 @@ export async function prepareBackgroundImage(
 export async function createOGImageResponse(
   parsedConfig: ProcessedOGConfig,
   fontFamilyCSS: string,
-  imageResponseFonts: any[],
+  imageResponseFonts: ImageResponseFont[],
   bgImageDataUri: string,
   logoConfig: ProcessedLogoConfig
 ): Promise<ImageResponse> {

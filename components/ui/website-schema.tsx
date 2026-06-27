@@ -24,7 +24,7 @@ export function WebsiteSchema() {
   }
 
   // Derive social links from navigation settings
-  const socialLinks = [];
+  const socialLinks: string[] = [];
   if (config.nav.github?.show && config.nav.github?.url) {
     socialLinks.push(config.nav.github.url);
   }
@@ -83,7 +83,7 @@ export function WebsiteSchema() {
   // Add search actions
   if (includeSearch) {
     // Create search actions array
-    const searchActions = [];
+    const searchActions: SearchAction[] = [];
 
     // Standard search URL template for general site search
     const generalSearchUrlTemplate = `${baseUrl}/search?q={search_term_string}`;

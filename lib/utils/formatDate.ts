@@ -32,7 +32,7 @@ export function formatDate(dateString: string | null | undefined) {
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-  let relativeTime;
+  let relativeTime: string;
   if (diffInSeconds < SECONDS_PER_MINUTE) {
     relativeTime = 'just now';
   } else if (diffInSeconds < SECONDS_PER_HOUR) {

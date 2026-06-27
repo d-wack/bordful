@@ -23,6 +23,17 @@ type MetadataBreadcrumbProps = {
   items?: { name: string; url: string }[];
 };
 
+/** Extract the raw title string from Next.js Metadata. */
+function extractRawTitle(metadata: Metadata): string {
+  if (typeof metadata.title === 'string') {
+    return metadata.title;
+  }
+  if (metadata.title && 'default' in metadata.title) {
+    return metadata.title.default as string;
+  }
+  return '';
+}
+
 /**
  * Extracts breadcrumb items from page metadata
  */
@@ -30,27 +41,15 @@ function extractBreadcrumbsFromMetadata(
   metadata: Metadata,
   pathname: string
 ): { name: string; url: string }[] {
-  // Start with home
   const breadcrumbs: { name: string; url: string }[] = [
     { name: 'Home', url: '/' },
   ];
 
-  // Get title from metadata
-  let title = '';
-  if (typeof metadata.title === 'string') {
-    title = metadata.title;
-  } else if (metadata.title && 'default' in metadata.title) {
-    title = metadata.title.default as string;
-  }
+  // Remove any site suffix (e.g., " | My Site") from the raw title
+  const cleanedTitle = extractRawTitle(metadata).split('|')[0].trim();
 
-  // If we have a title, add the current page
-  if (title) {
-    // Remove any site suffix (e.g., " | My Site")
-    const cleanedTitle = title.split('|')[0].trim();
-    breadcrumbs.push({
-      name: cleanedTitle,
-      url: pathname,
-    });
+  if (cleanedTitle.length > 0) {
+    breadcrumbs.push({ name: cleanedTitle, url: pathname });
   }
 
   return breadcrumbs;
